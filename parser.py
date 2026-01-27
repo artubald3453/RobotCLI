@@ -25,14 +25,62 @@ def parse_command(command_string):
 def execute_command(alias_name, duration):
     """
     Execute a command by:
-    1. Resolving alias to config_spotX
+    1. Resolving alias to config_spotX (or checking if it's a group)
     2. Resolving config_spotX to pin number
     3. Calling pin{N}_on() for duration seconds
     4. Calling pin{N}_off()
+    
+    Also handles GROUPS by activating all pins in the group simultaneously.
     """
-    # Check if alias exists
+    # Check if it's a group command
+    if alias_name in GROUPS:
+        print(f"Activating group '{alias_name}' for {duration} seconds...")
+        group_aliases = GROUPS[alias_name]
+        pin_functions = []
+        
+        # Collect all pin functions for this group
+        try:
+            for sub_alias in group_aliases:
+                if sub_alias not in ALIASES:
+                    print(f"Error: Unknown alias '{sub_alias}' in group '{alias_name}'")
+                    return False
+                
+                config_spot = ALIASES[sub_alias]
+                if config_spot not in GPIO_PINS:
+                    print(f"Error: Unknown config spot '{config_spot}'")
+                    return False
+                
+                pin_number = GPIO_PINS[config_spot]
+                pin_on_func = getattr(pinrun, f'pin{pin_number}_on')
+                pin_off_func = getattr(pinrun, f'pin{pin_number}_off')
+                pin_functions.append((sub_alias, pin_number, pin_on_func, pin_off_func))
+            
+            # Activate all pins in the group
+            for sub_alias, pin_number, pin_on_func, _ in pin_functions:
+                print(f"  Activating {sub_alias} (pin {pin_number})...")
+                pin_on_func()
+            
+            # Wait for the specified duration
+            time.sleep(duration)
+            
+            # Deactivate all pins in the group
+            for sub_alias, pin_number, _, pin_off_func in pin_functions:
+                print(f"  Deactivating {sub_alias} (pin {pin_number})...")
+                pin_off_func()
+            
+            print(f"Group '{alias_name}' deactivated")
+            return True
+        
+        except AttributeError as e:
+            print(f"Error: Pin functions not found in pinrun: {e}")
+            return False
+        except Exception as e:
+            print(f"Error executing group command: {e}")
+            return False
+    
+    # Check if alias exists (single pin)
     if alias_name not in ALIASES:
-        print(f"Error: Unknown alias '{alias_name}'")
+        print(f"Error: Unknown alias '{alias_name}' (not in ALIASES or GROUPS)")
         return False
     
     # Get the config_spotX name
