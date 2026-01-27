@@ -31,6 +31,10 @@ GPIO_PINS = {
     "config_spot21": 3,
     "config_spot22": 10,
     "config_spot23": 11,
+    "config_spot24": 9,
+    "config_spot25": 8,
+    "config_spot26": 7,
+    "config_spot27": 28,
 }
 
 
@@ -70,6 +74,10 @@ ALIASES = {
     "spare_3": "config_spot21",
     "spare_4": "config_spot22",
     "spare_5": "config_spot23",
+    "spare_6": "config_spot24",
+    "spare_7": "config_spot25",
+    "spare_8": "config_spot26",
+    "spare_9": "config_spot27",
 }
 
 

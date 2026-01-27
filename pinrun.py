@@ -3,16 +3,9 @@ import RPi.GPIO as GPIO
 GPIO.setmode(GPIO.BCM)
 
 # ---- Setup all GPIO 1–27 as outputs ----
-for pin in range(1, 28):
+for pin in range(2, 28):
     GPIO.setup(pin, GPIO.OUT)
     GPIO.output(pin, GPIO.LOW)
-
-# ---- PIN 1 ----
-def pin1_on():
-    GPIO.output(1, GPIO.HIGH)
-
-def pin1_off():
-    GPIO.output(1, GPIO.LOW)
 
 
 # ---- PIN 2 ----
