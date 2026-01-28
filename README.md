@@ -139,17 +139,30 @@ GROUPS = {
 - **config.py** - Configuration file with GPIO mappings, aliases, and groups
 - **parser.py** - Main CLI interface that accepts and executes commands
 - **pinrun.py** - Low-level GPIO control functions for each pin
+- **web_server.py** - Flask web server for network-based GUI control
+- **templates/index.html** - Responsive web interface for controlling GPIO pins
+- **requirements-web.txt** - Python dependencies for the web server
 
 ## Requirements
 
+### Core
 - Raspberry Pi with GPIO pins
 - Python 3
-- RPi.GPIO library
+- RPi.GPIO library: `sudo apt-get install python3-rpi.gpio`
+
+### Web GUI (Optional)
+- Flask: `pip3 install Flask==2.3.0`
 
 ## Installation
 
+### Core Setup
 ```bash
 sudo apt-get install python3-rpi.gpio
+```
+
+### Web GUI Setup (Optional)
+```bash
+pip3 install -r requirements-web.txt
 ```
 
 ## Customization
@@ -186,17 +199,20 @@ Then run: `motor_new(5)`
 
 ## Future Roadmap
 
+### Recently Completed ✅
+- **Web UI Dashboard** - Visual interface to monitor and control pins in real-time
+- **REST API Integration** - Control GPIO pins via HTTP endpoints for remote operation
+
 ### Planned Features
 
-- **REST API Integration** - Control GPIO pins via HTTP endpoints for remote operation and integration with web dashboards
 - **Batch Command Execution** - Run multiple commands in sequence from a script file
 - **Conditional Logic** - Add if/else statements for automated workflows
 - **Timing & Scheduling** - Schedule commands to run at specific times or intervals
-- **Group Activation** - Implement the GROUPS feature to activate multiple components with a single command
 - **Status Monitoring** - Query current pin states and get feedback on component status
 - **Event Logging** - Log all commands and GPIO state changes to a file for debugging and auditing
-- **Web UI Dashboard** - Visual interface to monitor and control pins in real-time
 - **Python Library Export** - Package RobotCLI as a Python module for use in other projects
 - **Error Recovery** - Automatic recovery from GPIO errors and connection issues
+- **Performance Metrics** - Track execution times and performance data
+- **AI API Control** - Integrate with AI APIs and let them use RobotCLI!
 - **Performance Metrics** - Track execution times and performance data
 - **AI API controll** - API any AI you want and let it use RobotCLI!
