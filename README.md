@@ -35,7 +35,7 @@ led_1(0.5)         # Turn on led_1 for 0.5 seconds
 servo_1(3)         # Activate servo_1 for 3 seconds
 ```
 
-## Running the Parser
+## Running the CLI
 
 ```bash
 python3 parser.py
@@ -56,6 +56,42 @@ Deactivated led_2 (pin 20)
 Exiting...
 GPIO cleanup completed
 ```
+
+## Running the Web GUI
+
+Access your robot from any device on the network with a clean, modern interface:
+
+### Setup (first time only)
+
+```bash
+pip3 install -r requirements-web.txt
+```
+
+### Start the Web Server
+
+```bash
+sudo python3 web_server.py
+```
+
+The server will start on **port 8000**. Access it from any device on your network:
+
+```
+http://<your-pi-ip>:8000
+```
+
+**Find your Pi's IP address:**
+```bash
+hostname -I
+```
+
+### Features
+
+- 🎨 **Clean, Responsive GUI** - Works on desktop, tablet, and mobile
+- 🌐 **Network Access** - Control from any device on your network
+- ⏱️ **Adjustable Duration** - Set activation time in real-time with a slider
+- 📦 **Grouped Controls** - Organize controls by motor, LED, relay, servo, etc.
+- ⛔ **Emergency Stop** - One-click button to stop all components
+- 📊 **Live Status** - See what's currently active
 
 ## Configuration
 

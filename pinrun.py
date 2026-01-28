@@ -8,6 +8,14 @@ for pin in range(2, 28):
     GPIO.output(pin, GPIO.LOW)
 
 
+# ---- PIN 1 ----
+def pin1_on():
+    GPIO.output(1, GPIO.HIGH)
+
+def pin1_off():
+    GPIO.output(1, GPIO.LOW)
+
+
 # ---- PIN 2 ----
 def pin2_on():
     GPIO.output(2, GPIO.HIGH)

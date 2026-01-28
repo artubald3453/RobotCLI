@@ -34,7 +34,7 @@ GPIO_PINS = {
     "config_spot24": 9,
     "config_spot25": 8,
     "config_spot26": 7,
-    "config_spot27": 28,
+    "config_spot27": 1,
 }
 
 
