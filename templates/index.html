@@ -572,8 +572,13 @@
                 const item = document.createElement('div');
                 item.className = 'config-item';
                 item.innerHTML = `
-                    <div class="config-item-key">${name}</div>
-                    <div class="config-item-value">${spot}</div>
+                    <div>
+                        <div class="config-item-key">${name}</div>
+                        <div class="config-item-value">${spot}</div>
+                    </div>
+                    <div>
+                        <button class="form-btn" onclick="deleteAlias('${name}')">Delete</button>
+                    </div>
                 `;
                 list.appendChild(item);
             }
@@ -586,9 +591,15 @@
             for (const [spot, pin] of Object.entries(config.gpio_pins || {})) {
                 const item = document.createElement('div');
                 item.className = 'config-item';
+                const pinText = (pin === null || pin === undefined) ? 'Unmapped' : 'Pin ' + pin;
                 item.innerHTML = `
-                    <div class="config-item-key">${spot}</div>
-                    <div class="config-item-value">Pin ${pin}</div>
+                    <div>
+                        <div class="config-item-key">${spot}</div>
+                        <div class="config-item-value">${pinText}</div>
+                    </div>
+                    <div>
+                        <button class="form-btn" onclick="deleteGPIOPin('${spot}')">Delete</button>
+                    </div>
                 `;
                 list.appendChild(item);
             }
@@ -602,8 +613,13 @@
                 const item = document.createElement('div');
                 item.className = 'config-item';
                 item.innerHTML = `
-                    <div class="config-item-key">${name}</div>
-                    <div class="config-item-value">${aliases.join(', ')}</div>
+                    <div>
+                        <div class="config-item-key">${name}</div>
+                        <div class="config-item-value">${aliases.join(', ')}</div>
+                    </div>
+                    <div>
+                        <button class="form-btn" onclick="deleteGroup('${name}')">Delete</button>
+                    </div>
                 `;
                 list.appendChild(item);
             }
@@ -724,6 +740,72 @@
 
             document.querySelectorAll('.config-tabs .tab-btn').forEach(el => el.classList.remove('active'));
             event.target.classList.add('active');
+        }
+
+        // Delete an alias
+        async function deleteAlias(name) {
+            if (!confirm(`Delete alias "${name}"? This cannot be undone.`)) return;
+            try {
+                const response = await fetch('/api/config/aliases', {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name })
+                });
+                const result = await response.json();
+                if (result.success) {
+                    updateStatus(`Alias "${name}" deleted`, true);
+                    loadConfig();
+                } else {
+                    updateStatus('Error: ' + result.error, false);
+                }
+            } catch (err) {
+                console.error(err);
+                updateStatus('Error deleting alias', false);
+            }
+        }
+
+        // Delete a gpio pin mapping
+        async function deleteGPIOPin(spot) {
+            if (!confirm(`Delete mapping for "${spot}"? This will set it to Unmapped.`)) return;
+            try {
+                const response = await fetch('/api/config/gpio-pins', {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ config_spot: spot })
+                });
+                const result = await response.json();
+                if (result.success) {
+                    updateStatus(`Mapping for "${spot}" removed`, true);
+                    loadConfig();
+                } else {
+                    updateStatus('Error: ' + result.error, false);
+                }
+            } catch (err) {
+                console.error(err);
+                updateStatus('Error deleting mapping', false);
+            }
+        }
+
+        // Delete a group
+        async function deleteGroup(name) {
+            if (!confirm(`Delete group "${name}"?`)) return;
+            try {
+                const response = await fetch('/api/config/groups', {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name })
+                });
+                const result = await response.json();
+                if (result.success) {
+                    updateStatus(`Group "${name}" deleted`, true);
+                    loadConfig();
+                } else {
+                    updateStatus('Error: ' + result.error, false);
+                }
+            } catch (err) {
+                console.error(err);
+                updateStatus('Error deleting group', false);
+            }
         }
 
         // Activate a single alias
