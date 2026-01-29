@@ -443,6 +443,9 @@
                         <label>Config Spot:</label>
                         <input type="text" id="newAliasSpot" placeholder="e.g., config_spot28">
                     </div>
+                    <div class="form-group">
+                        <label><input type="checkbox" id="newAliasAutoOff" checked> Auto-turn-off after duration</label>
+                    </div>
                     <button class="form-btn" onclick="addAlias()">Add Alias</button>
                 </div>
                 <div id="aliases-list" class="config-list"></div>
@@ -476,6 +479,13 @@
                     <div class="form-group">
                         <label>Aliases (comma-separated):</label>
                         <input type="text" id="newGroupAliases" placeholder="e.g., motor_1, motor_2, led_1">
+                    </div>
+                    <div class="form-group">
+                        <label>Action:</label>
+                        <select id="newGroupAction">
+                            <option value="on">Turn On</option>
+                            <option value="off">Turn Off</option>
+                        </select>
                     </div>
                     <button class="form-btn" onclick="addGroup()">Create Group</button>
                 </div>
@@ -576,15 +586,20 @@
         function displayAliases() {
             const list = document.getElementById('aliases-list');
             list.innerHTML = '<h4>Current Aliases:</h4>';
-            for (const [name, spot] of Object.entries(config.aliases || {})) {
+            for (const [name, val] of Object.entries(config.aliases || {})) {
+                // val may be a string (legacy) or an object {config_spot, auto_off}
+                let spot = val && val.config_spot ? val.config_spot : val;
+                let autoOff = val && (typeof val.auto_off !== 'undefined') ? val.auto_off : true;
                 const item = document.createElement('div');
                 item.className = 'config-item';
                 item.innerHTML = `
                     <div>
                         <div class="config-item-key">${name}</div>
                         <div class="config-item-value">${spot}</div>
+                        <div class="config-item-value">Auto-off: ${autoOff ? 'Yes' : 'No'}</div>
                     </div>
                     <div>
+                        <button class="form-btn" onclick="toggleAutoOff('${name}', ${autoOff})">Toggle Auto-off</button>
                         <button class="form-btn" onclick="deleteAlias('${name}')">Delete</button>
                     </div>
                 `;
@@ -617,15 +632,19 @@
         function displayGroups() {
             const list = document.getElementById('groups-list');
             list.innerHTML = '<h4>Current Groups:</h4>';
-            for (const [name, aliases] of Object.entries(config.groups || {})) {
+            for (const [name, v] of Object.entries(config.groups || {})) {
+                let aliases = v && v.aliases ? v.aliases : v;
+                let action = v && v.action ? v.action : 'on';
                 const item = document.createElement('div');
                 item.className = 'config-item';
                 item.innerHTML = `
                     <div>
                         <div class="config-item-key">${name}</div>
                         <div class="config-item-value">${aliases.join(', ')}</div>
+                        <div class="config-item-value">Action: ${action.toUpperCase()}</div>
                     </div>
                     <div>
+                        <button class="form-btn" onclick="toggleGroupAction('${name}', '${action}')">Toggle Action</button>
                         <button class="form-btn" onclick="deleteGroup('${name}')">Delete</button>
                     </div>
                 `;
@@ -637,6 +656,7 @@
         async function addAlias() {
             const name = document.getElementById('newAliasName').value;
             const spot = document.getElementById('newAliasSpot').value;
+            const autoOff = document.getElementById('newAliasAutoOff').checked;
 
             if (!name || !spot) {
                 updateStatus('Please fill in all fields', false);
@@ -647,7 +667,7 @@
                 const response = await fetch('/api/config/aliases', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ name, config_spot: spot })
+                    body: JSON.stringify({ name, config_spot: spot, auto_off: autoOff })
                 });
 
                 const result = await response.json();
@@ -655,6 +675,7 @@
                     updateStatus(`Alias "${name}" added successfully`, true);
                     document.getElementById('newAliasName').value = '';
                     document.getElementById('newAliasSpot').value = '';
+                    document.getElementById('newAliasAutoOff').checked = true;
                     loadConfig();
                 } else {
                     updateStatus('Error: ' + result.error, false);
@@ -704,6 +725,7 @@
                 .split(',')
                 .map(a => a.trim())
                 .filter(a => a);
+            const action = document.getElementById('newGroupAction').value || 'on';
 
             if (!name || aliases.length === 0) {
                 updateStatus('Please fill in all fields', false);
@@ -714,7 +736,7 @@
                 const response = await fetch('/api/config/groups', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ name, aliases })
+                    body: JSON.stringify({ name, aliases, action })
                 });
 
                 const result = await response.json();
@@ -772,6 +794,31 @@
             }
         }
 
+        // Toggle auto-off for an alias
+        async function toggleAutoOff(name, current) {
+            const newVal = !current;
+            try {
+                // We need the current config spot to update the alias
+                const alias = config.aliases[name];
+                const spot = (alias && alias.config_spot) ? alias.config_spot : alias;
+                const response = await fetch('/api/config/aliases', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, config_spot: spot, auto_off: newVal })
+                });
+                const result = await response.json();
+                if (result.success) {
+                    updateStatus(`Alias "${name}" auto-off set to ${newVal}`, true);
+                    loadConfig();
+                } else {
+                    updateStatus('Error: ' + result.error, false);
+                }
+            } catch (err) {
+                console.error(err);
+                updateStatus('Error toggling auto-off', false);
+            }
+        }
+
         // Delete a gpio pin mapping
         async function deleteGPIOPin(spot) {
             if (!confirm(`Delete mapping for "${spot}"? This will set it to Unmapped.`)) return;
@@ -813,6 +860,30 @@
             } catch (err) {
                 console.error(err);
                 updateStatus('Error deleting group', false);
+            }
+        }
+
+        // Toggle group action between on/off
+        async function toggleGroupAction(name, currentAction) {
+            const newAction = (currentAction === 'on') ? 'off' : 'on';
+            try {
+                const grp = config.groups[name];
+                const aliases = grp && grp.aliases ? grp.aliases : grp;
+                const response = await fetch('/api/config/groups', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, aliases, action: newAction })
+                });
+                const result = await response.json();
+                if (result.success) {
+                    updateStatus(`Group "${name}" action set to ${newAction}`, true);
+                    loadConfig();
+                } else {
+                    updateStatus('Error: ' + result.error, false);
+                }
+            } catch (err) {
+                console.error(err);
+                updateStatus('Error toggling group action', false);
             }
         }
 

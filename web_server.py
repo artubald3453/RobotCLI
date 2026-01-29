@@ -100,7 +100,11 @@ def reload_config():
 
 @app.route('/api/config/aliases', methods=['GET', 'POST', 'DELETE'])
 def manage_aliases():
-    """Get, add/update, or remove aliases"""
+    """Get, add/update, or remove aliases
+
+    Alias format:
+      { 'name': 'alias', 'config_spot': 'config_spot1', 'auto_off': true }
+    """
     if request.method == 'GET':
         return jsonify(ALIASES)
     
@@ -120,6 +124,7 @@ def manage_aliases():
     data = request.json
     alias_name = data.get('name')
     config_spot = data.get('config_spot')
+    auto_off = data.get('auto_off', True)
     
     if not alias_name or not config_spot:
         return jsonify({'error': 'Missing name or config_spot'}), 400
@@ -127,9 +132,14 @@ def manage_aliases():
     if config_spot not in GPIO_PINS:
         return jsonify({'error': 'Invalid config_spot'}), 400
     
-    ALIASES[alias_name] = config_spot
+    try:
+        auto_off = bool(auto_off)
+    except Exception:
+        auto_off = True
+    
+    ALIASES[alias_name] = {'config_spot': config_spot, 'auto_off': auto_off}
     save_config()
-    return jsonify({'success': True, 'alias': alias_name, 'config_spot': config_spot})
+    return jsonify({'success': True, 'alias': alias_name, 'config_spot': config_spot, 'auto_off': auto_off})
 
 
 @app.route('/api/config/gpio-pins', methods=['GET', 'POST', 'DELETE'])
@@ -171,7 +181,11 @@ def manage_gpio_pins():
 
 @app.route('/api/config/groups', methods=['GET', 'POST', 'DELETE'])
 def manage_groups():
-    """Get, add/update, or remove groups"""
+    """Get, add/update, or remove groups
+
+    Group format:
+      { 'name': 'group', 'aliases': ['a','b'], 'action': 'on'|'off' }
+    """
     if request.method == 'GET':
         return jsonify(GROUPS)
     
@@ -191,6 +205,7 @@ def manage_groups():
     data = request.json
     group_name = data.get('name')
     aliases_list = data.get('aliases', [])
+    action = data.get('action', 'on')
     
     if not group_name:
         return jsonify({'error': 'Missing group name'}), 400
@@ -200,22 +215,32 @@ def manage_groups():
         if alias not in ALIASES:
             return jsonify({'error': f'Unknown alias: {alias}'}), 400
     
-    GROUPS[group_name] = aliases_list
+    if action not in ('on', 'off'):
+        return jsonify({'error': 'Invalid action; must be "on" or "off"'}), 400
+    
+    GROUPS[group_name] = {'aliases': aliases_list, 'action': action}
     save_config()
-    return jsonify({'success': True, 'group': group_name, 'aliases': aliases_list})
+    return jsonify({'success': True, 'group': group_name, 'aliases': aliases_list, 'action': action})
 
 
 @app.route('/api/activate', methods=['POST'])
 def activate():
-    """Activate an alias for specified duration"""
+    """Activate an alias for specified duration. Respects per-alias `auto_off` setting."""
     data = request.json
     alias = data.get('alias')
     duration = float(data.get('duration', 1.0))
     
     if alias not in ALIASES:
         return jsonify({'error': 'Unknown alias'}), 400
+    # alias may be dict
+    a = ALIASES[alias]
+    if isinstance(a, str):
+        config_spot = a
+        auto_off = True
+    else:
+        config_spot = a.get('config_spot')
+        auto_off = bool(a.get('auto_off', True))
     
-    config_spot = ALIASES[alias]
     pin_num = GPIO_PINS.get(config_spot)
     
     if pin_num is None:
@@ -223,19 +248,26 @@ def activate():
     if pin_num not in VALID_PINS:
         return jsonify({'error': 'Configured pin is invalid'}), 400
     
-    activate_pin(pin_num, duration)
+    if auto_off:
+        activate_pin(pin_num, duration)
+    else:
+        # Set indefinitely until manually stopped
+        with lock:
+            GPIO.output(pin_num, GPIO.HIGH)
+            active_pins[pin_num] = None
     
     return jsonify({
         'success': True,
         'alias': alias,
         'pin': pin_num,
-        'duration': duration
+        'duration': duration,
+        'auto_off': auto_off
     })
 
 
 @app.route('/api/activate-group', methods=['POST'])
 def activate_group():
-    """Activate all pins in a group"""
+    """Activate or deactivate all pins in a group depending on group's `action`"""
     data = request.json
     group = data.get('group')
     duration = float(data.get('duration', 1.0))
@@ -243,23 +275,50 @@ def activate_group():
     if group not in GROUPS:
         return jsonify({'error': 'Unknown group'}), 400
     
-    aliases = GROUPS[group]
+    grp = GROUPS[group]
+    if isinstance(grp, list):
+        aliases = grp
+        action = 'on'
+    else:
+        aliases = grp.get('aliases', [])
+        action = grp.get('action', 'on')
+
     activated = []
     
     for alias in aliases:
         if alias in ALIASES:
-            config_spot = ALIASES[alias]
+            a = ALIASES[alias]
+            if isinstance(a, str):
+                config_spot = a
+                auto_off = True
+            else:
+                config_spot = a.get('config_spot')
+                auto_off = bool(a.get('auto_off', True))
             pin_num = GPIO_PINS.get(config_spot)
             if pin_num is None or pin_num not in VALID_PINS:
                 continue
-            activate_pin(pin_num, duration)
-            activated.append({'alias': alias, 'pin': pin_num})
+            if action == 'on':
+                if auto_off:
+                    activate_pin(pin_num, duration)
+                else:
+                    with lock:
+                        GPIO.output(pin_num, GPIO.HIGH)
+                        active_pins[pin_num] = None
+                activated.append({'alias': alias, 'pin': pin_num})
+            else:
+                # action == 'off'
+                with lock:
+                    GPIO.output(pin_num, GPIO.LOW)
+                    if pin_num in active_pins:
+                        del active_pins[pin_num]
+                activated.append({'alias': alias, 'pin': pin_num})
     
     return jsonify({
         'success': True,
         'group': group,
         'activated': activated,
-        'duration': duration
+        'duration': duration,
+        'action': action
     })
 
 
@@ -270,8 +329,11 @@ def get_status():
         status = {}
         current_time = time.time()
         for pin_num, end_time in active_pins.items():
-            remaining = max(0, end_time - current_time)
-            status[str(pin_num)] = remaining
+            if end_time is None:
+                status[str(pin_num)] = None
+            else:
+                remaining = max(0, end_time - current_time)
+                status[str(pin_num)] = remaining
     
     return jsonify(status)
 

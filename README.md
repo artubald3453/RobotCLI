@@ -110,7 +110,7 @@ Important notes:
 
 - Aliases
   - GET `/api/config/aliases`
-  - POST `/api/config/aliases` { `"name": "alias_name", "config_spot": "config_spot1"` }
+  - POST `/api/config/aliases` { `"name": "alias_name", "config_spot": "config_spot1", "auto_off": true` }
   - DELETE `/api/config/aliases` { `"name": "alias_name"` }
 
 - GPIO pin mappings
@@ -120,12 +120,12 @@ Important notes:
 
 - Groups
   - GET `/api/config/groups`
-  - POST `/api/config/groups` { `"name": "group_name", "aliases": ["alias1","alias2"]` }
+  - POST `/api/config/groups` { `"name": "group_name", "aliases": ["alias1","alias2"], "action": "on" }`
   - DELETE `/api/config/groups` { `"name": "group_name"` }
 
 - Activate
-  - POST `/api/activate` { `"alias": "motor_1", "duration": 2.5` }
-  - POST `/api/activate-group` { `"group": "lights_on", "duration": 1.0` }
+  - POST `/api/activate` { `"alias": "motor_1", "duration": 2.5` }  (honors alias `auto_off` setting)
+  - POST `/api/activate-group` { `"group": "lights_on", "duration": 1.0` } (group `action` controls if group turns ON or OFF)
 
 - Stop
   - POST `/api/stop` { `"alias": "motor_1"` } (or omit `alias` to stop everything)
