@@ -1,0 +1,807 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🤖 RobotCLI Control</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 1000px;
+            width: 100%;
+            padding: 40px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            color: #333;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            color: #888;
+            font-size: 1em;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 30px;
+            border-bottom: 2px solid #ddd;
+        }
+
+        .tab-btn {
+            padding: 12px 24px;
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 1em;
+            font-weight: 600;
+            color: #999;
+            border-bottom: 3px solid transparent;
+            transition: all 0.3s ease;
+        }
+
+        .tab-btn.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .status-bar {
+            padding: 12px;
+            background: #fff3cd;
+            color: #856404;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: none;
+            text-align: center;
+        }
+
+        .status-bar.active {
+            display: block;
+        }
+
+        /* Control Tab Styles */
+        .duration-control {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 10px;
+        }
+
+        .duration-control label {
+            font-weight: 600;
+            color: #333;
+            min-width: 100px;
+        }
+
+        .duration-control input {
+            flex: 1;
+            padding: 10px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 1em;
+        }
+
+        .duration-control input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .duration-display {
+            background: #667eea;
+            color: white;
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-weight: 600;
+            min-width: 80px;
+            text-align: center;
+        }
+
+        .section {
+            margin-bottom: 40px;
+        }
+
+        .section-title {
+            font-size: 1.3em;
+            font-weight: 700;
+            color: #333;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 3px solid #667eea;
+        }
+
+        .control-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+        }
+
+        .control-btn {
+            padding: 15px;
+            border: none;
+            border-radius: 10px;
+            font-size: 1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            color: white;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .control-btn::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.2);
+            transition: left 0.3s ease;
+        }
+
+        .control-btn:hover::before {
+            left: 100%;
+        }
+
+        .control-btn:active {
+            transform: scale(0.98);
+        }
+
+        .motor-btn {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        }
+
+        .motor-btn:hover {
+            box-shadow: 0 8px 20px rgba(245, 87, 108, 0.4);
+            transform: translateY(-2px);
+        }
+
+        .led-btn {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+        }
+
+        .led-btn:hover {
+            box-shadow: 0 8px 20px rgba(79, 172, 254, 0.4);
+            transform: translateY(-2px);
+        }
+
+        .relay-btn {
+            background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+            color: #333;
+        }
+
+        .relay-btn:hover {
+            box-shadow: 0 8px 20px rgba(250, 112, 154, 0.4);
+            transform: translateY(-2px);
+        }
+
+        .servo-btn {
+            background: linear-gradient(135deg, #30cfd0 0%, #330867 100%);
+        }
+
+        .servo-btn:hover {
+            box-shadow: 0 8px 20px rgba(48, 207, 208, 0.4);
+            transform: translateY(-2px);
+        }
+
+        .buzzer-btn {
+            background: linear-gradient(135deg, #ffa400 0%, #ff6b00 100%);
+        }
+
+        .buzzer-btn:hover {
+            box-shadow: 0 8px 20px rgba(255, 164, 0, 0.4);
+            transform: translateY(-2px);
+        }
+
+        .group-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            grid-column: span 2;
+        }
+
+        .group-btn:hover {
+            box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
+            transform: translateY(-2px);
+        }
+
+        .aux-btn {
+            background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
+            color: #333;
+        }
+
+        .aux-btn:hover {
+            box-shadow: 0 8px 20px rgba(168, 237, 234, 0.4);
+            transform: translateY(-2px);
+        }
+
+        .stop-all-btn {
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a6f 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 1.2em;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-top: 30px;
+        }
+
+        .stop-all-btn:hover {
+            box-shadow: 0 8px 20px rgba(255, 107, 107, 0.4);
+            transform: translateY(-2px);
+        }
+
+        /* Config Tab Styles */
+        .config-tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #ddd;
+            margin-left: 0;
+        }
+
+        .config-form {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+
+        .config-form h3 {
+            margin-bottom: 15px;
+            color: #333;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-group label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 5px;
+            color: #333;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 1em;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .form-btn {
+            padding: 10px 20px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .form-btn:hover {
+            background: #764ba2;
+            transform: translateY(-2px);
+        }
+
+        .config-list {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+        }
+
+        .config-item {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .config-item-key {
+            font-weight: 600;
+            color: #333;
+        }
+
+        .config-item-value {
+            color: #666;
+        }
+
+        @media (max-width: 600px) {
+            .container {
+                padding: 20px;
+            }
+
+            .header h1 {
+                font-size: 1.8em;
+            }
+
+            .control-grid {
+                grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            }
+
+            .group-btn {
+                grid-column: auto;
+            }
+
+            .duration-control {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .duration-control label {
+                min-width: auto;
+            }
+
+            .duration-display {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🤖 RobotCLI Control</h1>
+            <p>Web-based GPIO Control Panel</p>
+        </div>
+
+        <div class="tabs">
+            <button class="tab-btn active" onclick="switchTab('control')">🎮 Control</button>
+            <button class="tab-btn" onclick="switchTab('config')">⚙️ Configuration</button>
+        </div>
+
+        <!-- Control Tab -->
+        <div id="control-tab" class="tab-content active">
+            <div id="statusBar" class="status-bar"></div>
+
+            <div class="duration-control">
+                <label for="durationInput">Duration (seconds):</label>
+                <input type="number" id="durationInput" value="1" step="0.1" min="0.1">
+                <div class="duration-display" id="durationDisplay">1.0s</div>
+            </div>
+
+            <div id="controls"></div>
+            <button class="stop-all-btn" onclick="stopAll()">⏹ STOP ALL</button>
+        </div>
+
+        <!-- Configuration Tab -->
+        <div id="config-tab" class="tab-content">
+            <div class="config-tabs">
+                <button class="tab-btn active" onclick="switchConfigTab('aliases')">Aliases</button>
+                <button class="tab-btn" onclick="switchConfigTab('gpio')">GPIO Pins</button>
+                <button class="tab-btn" onclick="switchConfigTab('groups')">Groups</button>
+            </div>
+
+            <!-- Aliases Section -->
+            <div id="aliases-config" class="tab-content active">
+                <div class="config-form">
+                    <h3>Add New Alias</h3>
+                    <div class="form-group">
+                        <label>Alias Name:</label>
+                        <input type="text" id="newAliasName" placeholder="e.g., led_3">
+                    </div>
+                    <div class="form-group">
+                        <label>Config Spot:</label>
+                        <input type="text" id="newAliasSpot" placeholder="e.g., config_spot28">
+                    </div>
+                    <button class="form-btn" onclick="addAlias()">Add Alias</button>
+                </div>
+                <div id="aliases-list" class="config-list"></div>
+            </div>
+
+            <!-- GPIO Pins Section -->
+            <div id="gpio-config" class="tab-content">
+                <div class="config-form">
+                    <h3>Update GPIO Pin Mapping</h3>
+                    <div class="form-group">
+                        <label>Config Spot:</label>
+                        <input type="text" id="gpioPinSpot" placeholder="e.g., config_spot1">
+                    </div>
+                    <div class="form-group">
+                        <label>Pin Number (1-27):</label>
+                        <input type="number" id="gpioPinNum" placeholder="1-27" min="1" max="27">
+                    </div>
+                    <button class="form-btn" onclick="updateGPIOPin()">Update Mapping</button>
+                </div>
+                <div id="gpio-list" class="config-list"></div>
+            </div>
+
+            <!-- Groups Section -->
+            <div id="groups-config" class="tab-content">
+                <div class="config-form">
+                    <h3>Create New Group</h3>
+                    <div class="form-group">
+                        <label>Group Name:</label>
+                        <input type="text" id="newGroupName" placeholder="e.g., custom_group">
+                    </div>
+                    <div class="form-group">
+                        <label>Aliases (comma-separated):</label>
+                        <input type="text" id="newGroupAliases" placeholder="e.g., motor_1, motor_2, led_1">
+                    </div>
+                    <button class="form-btn" onclick="addGroup()">Create Group</button>
+                </div>
+                <div id="groups-list" class="config-list"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let duration = 1;
+        let config = {};
+
+        // Load configuration from server
+        async function loadConfig() {
+            try {
+                const response = await fetch('/api/config');
+                config = await response.json();
+                renderControls();
+                loadConfigDisplay();
+            } catch (error) {
+                console.error('Error loading config:', error);
+                updateStatus('Error loading configuration', false);
+            }
+        }
+
+        // Render control buttons organized by type
+        function renderControls() {
+            const controls = document.getElementById('controls');
+            controls.innerHTML = '';
+
+            // Helper to categorize buttons
+            const categories = {
+                motors: { title: '🚗 Motors', items: [] },
+                leds: { title: '💡 LEDs', items: [] },
+                relays: { title: '🔌 Relays', items: [] },
+                servos: { title: '⚙️ Servos', items: [] },
+                buzzer: { title: '📢 Sound', items: [] },
+                aux: { title: '📌 Auxiliary', items: [] },
+                groups: { title: '🎯 Groups', items: [] }
+            };
+
+            // Sort aliases into categories
+            for (const [alias, spot] of Object.entries(config.aliases || {})) {
+                const btn = { name: alias, onclick: () => activateAlias(alias) };
+                if (alias.includes('motor')) categories.motors.items.push(btn);
+                else if (alias.includes('led')) categories.leds.items.push(btn);
+                else if (alias.includes('relay')) categories.relays.items.push(btn);
+                else if (alias.includes('servo')) categories.servos.items.push(btn);
+                else if (alias.includes('buzzer')) categories.buzzer.items.push(btn);
+                else categories.aux.items.push(btn);
+            }
+
+            // Sort groups
+            for (const groupName of Object.keys(config.groups || {})) {
+                categories.groups.items.push({
+                    name: groupName,
+                    onclick: () => activateGroup(groupName),
+                    isGroup: true
+                });
+            }
+
+            // Render each category
+            for (const [key, category] of Object.entries(categories)) {
+                if (category.items.length === 0) continue;
+
+                const section = document.createElement('div');
+                section.className = 'section';
+
+                const title = document.createElement('div');
+                title.className = 'section-title';
+                title.textContent = category.title;
+                section.appendChild(title);
+
+                const grid = document.createElement('div');
+                grid.className = 'control-grid';
+
+                for (const btn of category.items) {
+                    const button = document.createElement('button');
+                    button.className = `control-btn ${key}-btn`;
+                    button.textContent = btn.name.toUpperCase();
+                    button.onclick = btn.onclick;
+                    grid.appendChild(button);
+                }
+
+                section.appendChild(grid);
+                controls.appendChild(section);
+            }
+        }
+
+        // Load configuration display
+        async function loadConfigDisplay() {
+            displayAliases();
+            displayGPIOPins();
+            displayGroups();
+        }
+
+        // Display aliases
+        function displayAliases() {
+            const list = document.getElementById('aliases-list');
+            list.innerHTML = '<h4>Current Aliases:</h4>';
+            for (const [name, spot] of Object.entries(config.aliases || {})) {
+                const item = document.createElement('div');
+                item.className = 'config-item';
+                item.innerHTML = `
+                    <div class="config-item-key">${name}</div>
+                    <div class="config-item-value">${spot}</div>
+                `;
+                list.appendChild(item);
+            }
+        }
+
+        // Display GPIO pins
+        function displayGPIOPins() {
+            const list = document.getElementById('gpio-list');
+            list.innerHTML = '<h4>GPIO Pin Mappings:</h4>';
+            for (const [spot, pin] of Object.entries(config.gpio_pins || {})) {
+                const item = document.createElement('div');
+                item.className = 'config-item';
+                item.innerHTML = `
+                    <div class="config-item-key">${spot}</div>
+                    <div class="config-item-value">Pin ${pin}</div>
+                `;
+                list.appendChild(item);
+            }
+        }
+
+        // Display groups
+        function displayGroups() {
+            const list = document.getElementById('groups-list');
+            list.innerHTML = '<h4>Current Groups:</h4>';
+            for (const [name, aliases] of Object.entries(config.groups || {})) {
+                const item = document.createElement('div');
+                item.className = 'config-item';
+                item.innerHTML = `
+                    <div class="config-item-key">${name}</div>
+                    <div class="config-item-value">${aliases.join(', ')}</div>
+                `;
+                list.appendChild(item);
+            }
+        }
+
+        // Add new alias
+        async function addAlias() {
+            const name = document.getElementById('newAliasName').value;
+            const spot = document.getElementById('newAliasSpot').value;
+
+            if (!name || !spot) {
+                updateStatus('Please fill in all fields', false);
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/config/aliases', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, config_spot: spot })
+                });
+
+                const result = await response.json();
+                if (result.success) {
+                    updateStatus(`Alias "${name}" added successfully`, true);
+                    document.getElementById('newAliasName').value = '';
+                    document.getElementById('newAliasSpot').value = '';
+                    loadConfig();
+                } else {
+                    updateStatus('Error: ' + result.error, false);
+                }
+            } catch (error) {
+                updateStatus('Error adding alias', false);
+                console.error(error);
+            }
+        }
+
+        // Update GPIO pin
+        async function updateGPIOPin() {
+            const spot = document.getElementById('gpioPinSpot').value;
+            const pin = document.getElementById('gpioPinNum').value;
+
+            if (!spot || !pin) {
+                updateStatus('Please fill in all fields', false);
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/config/gpio-pins', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ config_spot: spot, pin_num: parseInt(pin) })
+                });
+
+                const result = await response.json();
+                if (result.success) {
+                    updateStatus(`GPIO mapping updated`, true);
+                    document.getElementById('gpioPinSpot').value = '';
+                    document.getElementById('gpioPinNum').value = '';
+                    loadConfig();
+                } else {
+                    updateStatus('Error: ' + result.error, false);
+                }
+            } catch (error) {
+                updateStatus('Error updating GPIO pin', false);
+                console.error(error);
+            }
+        }
+
+        // Add group
+        async function addGroup() {
+            const name = document.getElementById('newGroupName').value;
+            const aliases = document.getElementById('newGroupAliases').value
+                .split(',')
+                .map(a => a.trim())
+                .filter(a => a);
+
+            if (!name || aliases.length === 0) {
+                updateStatus('Please fill in all fields', false);
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/config/groups', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, aliases })
+                });
+
+                const result = await response.json();
+                if (result.success) {
+                    updateStatus(`Group "${name}" created successfully`, true);
+                    document.getElementById('newGroupName').value = '';
+                    document.getElementById('newGroupAliases').value = '';
+                    loadConfig();
+                } else {
+                    updateStatus('Error: ' + result.error, false);
+                }
+            } catch (error) {
+                updateStatus('Error creating group', false);
+                console.error(error);
+            }
+        }
+
+        // Switch main tabs
+        function switchTab(tab) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+            document.getElementById(tab + '-tab').classList.add('active');
+
+            document.querySelectorAll('.tabs .tab-btn').forEach(el => el.classList.remove('active'));
+            event.target.classList.add('active');
+        }
+
+        // Switch config tabs
+        function switchConfigTab(tab) {
+            document.querySelectorAll('#config-tab .tab-content').forEach(el => el.style.display = 'none');
+            document.getElementById(tab + '-config').style.display = 'block';
+
+            document.querySelectorAll('.config-tabs .tab-btn').forEach(el => el.classList.remove('active'));
+            event.target.classList.add('active');
+        }
+
+        // Activate a single alias
+        async function activateAlias(alias) {
+            try {
+                const response = await fetch('/api/activate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ alias, duration })
+                });
+
+                const result = await response.json();
+                if (result.success) {
+                    updateStatus(`Activated ${alias} for ${duration}s`, true);
+                } else {
+                    updateStatus('Error: ' + result.error, false);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                updateStatus('Error: Request failed', false);
+            }
+        }
+
+        // Activate a group
+        async function activateGroup(group) {
+            try {
+                const response = await fetch('/api/activate-group', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ group, duration })
+                });
+
+                const result = await response.json();
+                if (result.success) {
+                    const count = result.activated.length;
+                    updateStatus(`Activated group "${group}" (${count} components) for ${duration}s`, true);
+                } else {
+                    updateStatus('Error: ' + result.error, false);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                updateStatus('Error: Request failed', false);
+            }
+        }
+
+        // Stop all
+        async function stopAll() {
+            try {
+                const response = await fetch('/api/stop', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({})
+                });
+
+                const result = await response.json();
+                updateStatus('All components stopped', true);
+            } catch (error) {
+                console.error('Error:', error);
+                updateStatus('Error: Stop failed', false);
+            }
+        }
+
+        // Update duration display
+        document.getElementById('durationInput').addEventListener('input', (e) => {
+            duration = parseFloat(e.target.value) || 0.1;
+            document.getElementById('durationDisplay').textContent = duration.toFixed(1) + 's';
+        });
+
+        // Update status message
+        function updateStatus(message, success) {
+            const bar = document.getElementById('statusBar');
+            bar.textContent = message;
+            bar.className = success ? 'status-bar active' : 'status-bar';
+            setTimeout(() => bar.classList.remove('active'), 3000);
+        }
+
+        // Initialize
+        loadConfig();
+    </script>
+</body>
+</html>
