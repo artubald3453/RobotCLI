@@ -9,14 +9,27 @@ from flask import Flask, render_template, jsonify, request
 import RPi.GPIO as GPIO
 import threading
 import time
-from config import GPIO_PINS, ALIASES, GROUPS
+from config import GPIO_PINS, ALIASES, GROUPS, save_config, load_config
 
 app = Flask(__name__)
 
 # Setup GPIO
 GPIO.setmode(GPIO.BCM)
 # Note: GPIO 0 and 1 are reserved for I2C, pins 2-27 are standard GPIO
-for pin in range(2, 28):
+VALID_PINS = set(range(2, 28))
+
+# Validate existing mappings in config (unset invalid entries)
+invalid_spots = []
+for k, v in list(GPIO_PINS.items()):
+    if not isinstance(v, int) or v not in VALID_PINS:
+        invalid_spots.append(k)
+        GPIO_PINS[k] = None
+if invalid_spots:
+    print(f"⚠️ Invalid GPIO mappings for: {invalid_spots}. They have been unset (set to None).")
+    # Persist the changes so they survive a restart
+    save_config()
+
+for pin in VALID_PINS:
     GPIO.setup(pin, GPIO.OUT)
     GPIO.output(pin, GPIO.LOW)
 
@@ -59,13 +72,51 @@ def get_config():
     })
 
 
-@app.route('/api/config/aliases', methods=['GET', 'POST'])
+@app.route('/api/config/reload', methods=['POST'])
+def reload_config():
+    """Reload config.json from disk and re-validate mappings"""
+    success = load_config()
+
+    # Re-validate mappings and unset invalid entries
+    invalid_spots = []
+    for k, v in list(GPIO_PINS.items()):
+        if not isinstance(v, int) or v not in VALID_PINS:
+            if v is not None:
+                invalid_spots.append(k)
+            GPIO_PINS[k] = None
+
+    if invalid_spots:
+        # Persist corrected state
+        save_config()
+
+    return jsonify({
+        'success': bool(success),
+        'invalid': invalid_spots,
+        'gpio_pins': GPIO_PINS,
+        'aliases': ALIASES,
+        'groups': GROUPS,
+    })
+
+
+@app.route('/api/config/aliases', methods=['GET', 'POST', 'DELETE'])
 def manage_aliases():
-    """Get or update aliases"""
+    """Get, add/update, or remove aliases"""
     if request.method == 'GET':
         return jsonify(ALIASES)
     
-    # POST - update an alias
+    if request.method == 'DELETE':
+        data = request.json or {}
+        alias_name = data.get('name')
+        if not alias_name:
+            return jsonify({'error': 'Missing name'}), 400
+        if alias_name in ALIASES:
+            del ALIASES[alias_name]
+            save_config()
+            return jsonify({'success': True, 'deleted': alias_name})
+        else:
+            return jsonify({'error': 'Unknown alias'}), 400
+    
+    # POST - update/add an alias
     data = request.json
     alias_name = data.get('name')
     config_spot = data.get('config_spot')
@@ -77,35 +128,64 @@ def manage_aliases():
         return jsonify({'error': 'Invalid config_spot'}), 400
     
     ALIASES[alias_name] = config_spot
+    save_config()
     return jsonify({'success': True, 'alias': alias_name, 'config_spot': config_spot})
 
 
-@app.route('/api/config/gpio-pins', methods=['GET', 'POST'])
+@app.route('/api/config/gpio-pins', methods=['GET', 'POST', 'DELETE'])
 def manage_gpio_pins():
-    """Get or update GPIO pin mappings"""
+    """Get, add/update, or remove GPIO pin mappings"""
     if request.method == 'GET':
         return jsonify(GPIO_PINS)
+    
+    if request.method == 'DELETE':
+        data = request.json or {}
+        config_spot = data.get('config_spot')
+        if not config_spot:
+            return jsonify({'error': 'Missing config_spot'}), 400
+        if config_spot in GPIO_PINS:
+            GPIO_PINS[config_spot] = None
+            save_config()
+            return jsonify({'success': True, 'config_spot': config_spot, 'pin_num': None})
+        else:
+            return jsonify({'error': 'Unknown config_spot'}), 400
     
     # POST - update a GPIO pin mapping
     data = request.json
     config_spot = data.get('config_spot')
-    pin_num = int(data.get('pin_num', 0))
+    try:
+        pin_num = int(data.get('pin_num', 0))
+    except (TypeError, ValueError):
+        return jsonify({'error': 'Invalid pin_num'}), 400
     
     if not config_spot:
         return jsonify({'error': 'Missing config_spot'}), 400
     
-    if pin_num < 1 or pin_num > 27:
-        return jsonify({'error': 'Pin number must be between 1 and 27'}), 400
+    if pin_num < 2 or pin_num > 27:
+        return jsonify({'error': 'Pin number must be between 2 and 27'}), 400
     
     GPIO_PINS[config_spot] = pin_num
+    save_config()
     return jsonify({'success': True, 'config_spot': config_spot, 'pin_num': pin_num})
 
 
-@app.route('/api/config/groups', methods=['GET', 'POST'])
+@app.route('/api/config/groups', methods=['GET', 'POST', 'DELETE'])
 def manage_groups():
-    """Get or update groups"""
+    """Get, add/update, or remove groups"""
     if request.method == 'GET':
         return jsonify(GROUPS)
+    
+    if request.method == 'DELETE':
+        data = request.json or {}
+        group_name = data.get('name')
+        if not group_name:
+            return jsonify({'error': 'Missing group name'}), 400
+        if group_name in GROUPS:
+            del GROUPS[group_name]
+            save_config()
+            return jsonify({'success': True, 'deleted': group_name})
+        else:
+            return jsonify({'error': 'Unknown group'}), 400
     
     # POST - update a group
     data = request.json
@@ -121,6 +201,7 @@ def manage_groups():
             return jsonify({'error': f'Unknown alias: {alias}'}), 400
     
     GROUPS[group_name] = aliases_list
+    save_config()
     return jsonify({'success': True, 'group': group_name, 'aliases': aliases_list})
 
 
@@ -135,7 +216,12 @@ def activate():
         return jsonify({'error': 'Unknown alias'}), 400
     
     config_spot = ALIASES[alias]
-    pin_num = GPIO_PINS[config_spot]
+    pin_num = GPIO_PINS.get(config_spot)
+    
+    if pin_num is None:
+        return jsonify({'error': 'Alias not mapped to a valid GPIO pin'}), 400
+    if pin_num not in VALID_PINS:
+        return jsonify({'error': 'Configured pin is invalid'}), 400
     
     activate_pin(pin_num, duration)
     
@@ -163,7 +249,9 @@ def activate_group():
     for alias in aliases:
         if alias in ALIASES:
             config_spot = ALIASES[alias]
-            pin_num = GPIO_PINS[config_spot]
+            pin_num = GPIO_PINS.get(config_spot)
+            if pin_num is None or pin_num not in VALID_PINS:
+                continue
             activate_pin(pin_num, duration)
             activated.append({'alias': alias, 'pin': pin_num})
     
@@ -199,7 +287,9 @@ def stop():
             return jsonify({'error': 'Unknown alias'}), 400
         
         config_spot = ALIASES[alias]
-        pin_num = GPIO_PINS[config_spot]
+        pin_num = GPIO_PINS.get(config_spot)
+        if pin_num is None:
+            return jsonify({'error': 'Alias not mapped to a valid GPIO pin'}), 400
         
         with lock:
             GPIO.output(pin_num, GPIO.LOW)

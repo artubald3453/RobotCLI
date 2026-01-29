@@ -10,10 +10,18 @@ for pin in range(2, 28):
 
 
 # ---- PIN 1 ----
+VALID_PINS = set(range(2, 28))
+
 def pin1_on():
+    # PIN 1 is reserved for I2C and is not configured as an OUTPUT by default.
+    # Provide a clearer error instead of the lower-level RPi.GPIO exception.
+    if 1 not in VALID_PINS:
+        raise RuntimeError("GPIO 1 is reserved for I2C and is not configured as OUTPUT. Change your mapping before using pin1.")
     GPIO.output(1, GPIO.HIGH)
 
 def pin1_off():
+    if 1 not in VALID_PINS:
+        raise RuntimeError("GPIO 1 is reserved for I2C and is not configured as OUTPUT. Change your mapping before using pin1.")
     GPIO.output(1, GPIO.LOW)
 
 

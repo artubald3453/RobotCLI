@@ -34,7 +34,7 @@ GPIO_PINS = {
     "config_spot24": 25,
     "config_spot25": 26,
     "config_spot26": 27,
-    "config_spot27": 0,
+    "config_spot27": None,
 }
 
 
@@ -121,3 +121,81 @@ GROUPS = {
     # Everything OFF (debug/safety)
     "all_off": list(ALIASES.keys()),
 }
+
+# ---- Persistent config storage (JSON) ----
+import json
+import os
+import threading
+
+CONFIG_FILE = os.path.join(os.path.dirname(__file__), 'config.json')
+_config_lock = threading.Lock()
+
+
+def _save_json():
+    with _config_lock:
+        data = {
+            'GPIO_PINS': GPIO_PINS,
+            'ALIASES': ALIASES,
+            'GROUPS': GROUPS,
+        }
+        tmp = CONFIG_FILE + '.tmp'
+        try:
+            with open(tmp, 'w') as f:
+                json.dump(data, f, indent=2, sort_keys=True)
+            os.replace(tmp, CONFIG_FILE)
+        finally:
+            # best-effort cleanup of tmp file if something went wrong
+            if os.path.exists(tmp):
+                try:
+                    os.remove(tmp)
+                except Exception:
+                    pass
+
+
+def save_config():
+    """Persist current configuration to disk (config.json)"""
+    try:
+        _save_json()
+    except Exception as e:
+        print(f"⚠️ Failed saving config to {CONFIG_FILE}: {e}")
+
+
+def _load_json():
+    """Load configuration from disk and overlay defaults."""
+    if not os.path.exists(CONFIG_FILE):
+        # Persist defaults so users can edit file later
+        save_config()
+        return
+    try:
+        with open(CONFIG_FILE, 'r') as f:
+            data = json.load(f)
+        gp = data.get('GPIO_PINS')
+        if isinstance(gp, dict):
+            for k, v in gp.items():
+                GPIO_PINS[k] = v
+        al = data.get('ALIASES')
+        if isinstance(al, dict):
+            ALIASES.clear()
+            ALIASES.update(al)
+        gr = data.get('GROUPS')
+        if isinstance(gr, dict):
+            GROUPS.clear()
+            GROUPS.update(gr)
+    except Exception as e:
+        print(f"⚠️ Failed loading config from {CONFIG_FILE}: {e}")
+
+# Load config at import time
+_load_json()
+
+
+def load_config():
+    """Public wrapper to reload configuration from disk.
+
+    Returns True on success, False on error.
+    """
+    try:
+        _load_json()
+        return True
+    except Exception as e:
+        print(f"⚠️ Failed reloading config: {e}")
+        return False

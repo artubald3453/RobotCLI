@@ -93,6 +93,77 @@ hostname -I
 - ⛔ **Emergency Stop** - One-click button to stop all components
 - 📊 **Live Status** - See what's currently active
 
+---
+
+## REST API & Persistence
+
+The web GUI is backed by a small REST API that lets you view and modify the configuration programmatically. All changes are persisted to `config.json` in the repository root so they survive server restarts.
+
+Important notes:
+- Valid BCM pin numbers are **2–27** (pins 0 and 1 are reserved for I2C and are not configured as outputs by default).
+- When a config value is invalid it will be unset (set to `null` in `config.json`) and a warning will be printed on server start.
+
+### Endpoints (examples)
+
+- Get full config
+  - GET `/api/config`
+
+- Aliases
+  - GET `/api/config/aliases`
+  - POST `/api/config/aliases` { `"name": "alias_name", "config_spot": "config_spot1"` }
+  - DELETE `/api/config/aliases` { `"name": "alias_name"` }
+
+- GPIO pin mappings
+  - GET `/api/config/gpio-pins`
+  - POST `/api/config/gpio-pins` { `"config_spot": "config_spot1", "pin_num": 4` }
+  - DELETE `/api/config/gpio-pins` { `"config_spot": "config_spot1"` }
+
+- Groups
+  - GET `/api/config/groups`
+  - POST `/api/config/groups` { `"name": "group_name", "aliases": ["alias1","alias2"]` }
+  - DELETE `/api/config/groups` { `"name": "group_name"` }
+
+- Activate
+  - POST `/api/activate` { `"alias": "motor_1", "duration": 2.5` }
+  - POST `/api/activate-group` { `"group": "lights_on", "duration": 1.0` }
+
+- Stop
+  - POST `/api/stop` { `"alias": "motor_1"` } (or omit `alias` to stop everything)
+
+- Reload config from disk
+  - POST `/api/config/reload`  (reloads `config.json`, unsets invalid mappings, and persists corrections)
+
+### Quick curl examples
+
+```bash
+# Map config_spot27 to pin 26
+curl -X POST -H "Content-Type: application/json" -d '{"config_spot": "config_spot27", "pin_num": 26}' http://<pi-ip>:8000/api/config/gpio-pins
+
+# Add an alias
+curl -X POST -H "Content-Type: application/json" -d '{"name": "new_motor", "config_spot": "config_spot27"}' http://<pi-ip>:8000/api/config/aliases
+
+# Activate alias for 2 seconds
+curl -X POST -H "Content-Type: application/json" -d '{"alias": "new_motor", "duration": 2}' http://<pi-ip>:8000/api/activate
+
+# Delete an alias
+curl -X DELETE -H "Content-Type: application/json" -d '{"name": "new_motor"}' http://<pi-ip>:8000/api/config/aliases
+
+# Reload config (re-reads config.json and unsets invalid mappings)
+curl -X POST http://<pi-ip>:8000/api/config/reload
+```
+
+---
+
+## Running the integration test
+
+1. Start the web server: `sudo python3 web_server.py`
+2. Install requirements: `pip3 install requests`
+3. Run: `python3 tests/integration_test.py`
+
+The test will perform a small sequence of API calls (map a pin, add an alias, activate, stop, delete, reload).
+
+
+
 ## Configuration
 
 Edit `config.py` to customize your setup:
