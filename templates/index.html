@@ -153,121 +153,127 @@
         }
 
         .control-btn {
+            --btn-gradient: linear-gradient(135deg,#ff7eb3,#ff758c);
             padding: 15px;
             border: none;
-            border-radius: 10px;
+            border-radius: 14px;
             font-size: 1em;
-            font-weight: 600;
+            font-weight: 700;
             cursor: pointer;
-            transition: all 0.3s ease;
+            transition: transform 0.15s ease, box-shadow 0.15s ease;
             color: white;
             text-align: center;
             position: relative;
             overflow: hidden;
+            background: var(--btn-gradient);
+            box-shadow: 0 8px 20px rgba(0,0,0,0.12);
         }
 
-        .control-btn::before {
+        .control-btn::after {
             content: '';
             position: absolute;
-            top: 0;
-            left: -100%;
-            width: 100%;
-            height: 100%;
-            background: rgba(255, 255, 255, 0.2);
-            transition: left 0.3s ease;
+            inset: 0;
+            background: radial-gradient(circle at 10% 20%, rgba(255,255,255,0.18), transparent 20%),
+                        radial-gradient(circle at 80% 80%, rgba(255,255,255,0.08), transparent 25%);
+            opacity: 0.6;
+            mix-blend-mode: overlay;
+            pointer-events: none;
         }
 
-        .control-btn:hover::before {
-            left: 100%;
+        .control-btn:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 16px 36px rgba(0,0,0,0.18);
         }
 
         .control-btn:active {
-            transform: scale(0.98);
+            transform: translateY(0) scale(0.99);
         }
 
         .motor-btn {
-            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            --btn-gradient: linear-gradient(135deg, #f6d365 0%, #fda085 100%);
         }
 
         .motor-btn:hover {
-            box-shadow: 0 8px 20px rgba(245, 87, 108, 0.4);
-            transform: translateY(-2px);
+            box-shadow: 0 18px 36px rgba(253,160,133,0.24);
+            transform: translateY(-6px);
         }
 
         .led-btn {
-            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            --btn-gradient: linear-gradient(135deg, #a8ff78 0%, #78ffd6 100%);
         }
 
         .led-btn:hover {
-            box-shadow: 0 8px 20px rgba(79, 172, 254, 0.4);
-            transform: translateY(-2px);
+            box-shadow: 0 18px 36px rgba(120,255,214,0.18);
+            transform: translateY(-6px);
         }
 
         .relay-btn {
-            background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+            --btn-gradient: linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%);
             color: #333;
         }
 
         .relay-btn:hover {
-            box-shadow: 0 8px 20px rgba(250, 112, 154, 0.4);
-            transform: translateY(-2px);
+            box-shadow: 0 18px 36px rgba(255,170,190,0.18);
+            transform: translateY(-6px);
         }
 
         .servo-btn {
-            background: linear-gradient(135deg, #30cfd0 0%, #330867 100%);
+            --btn-gradient: linear-gradient(135deg, #89f7fe 0%, #66a6ff 100%);
         }
 
         .servo-btn:hover {
-            box-shadow: 0 8px 20px rgba(48, 207, 208, 0.4);
-            transform: translateY(-2px);
+            box-shadow: 0 18px 36px rgba(102,166,255,0.18);
+            transform: translateY(-6px);
         }
 
         .buzzer-btn {
-            background: linear-gradient(135deg, #ffa400 0%, #ff6b00 100%);
+            --btn-gradient: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%);
         }
 
         .buzzer-btn:hover {
-            box-shadow: 0 8px 20px rgba(255, 164, 0, 0.4);
-            transform: translateY(-2px);
+            box-shadow: 0 18px 36px rgba(252,182,159,0.18);
+            transform: translateY(-6px);
         }
 
         .group-btn {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            --btn-gradient: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
             grid-column: span 2;
         }
 
         .group-btn:hover {
-            box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
-            transform: translateY(-2px);
+            box-shadow: 0 18px 36px rgba(245,87,108,0.18);
+            transform: translateY(-6px);
         }
 
         .aux-btn {
-            background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
+            --btn-gradient: linear-gradient(135deg, #fbc2eb 0%, #a6c1ee 100%);
             color: #333;
         }
 
         .aux-btn:hover {
-            box-shadow: 0 8px 20px rgba(168, 237, 234, 0.4);
-            transform: translateY(-2px);
+            box-shadow: 0 18px 36px rgba(200,200,255,0.18);
+            transform: translateY(-6px);
         }
 
         .stop-all-btn {
             width: 100%;
             padding: 15px;
-            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a6f 100%);
+            --btn-gradient: linear-gradient(135deg, #ff5f6d 0%, #ffc371 100%);
+            background: var(--btn-gradient);
             color: white;
             border: none;
-            border-radius: 10px;
+            border-radius: 12px;
             font-size: 1.2em;
-            font-weight: 700;
+            font-weight: 800;
             cursor: pointer;
-            transition: all 0.3s ease;
+            transition: transform 0.15s ease, box-shadow 0.15s ease;
             margin-top: 30px;
+            box-shadow: 0 12px 30px rgba(255,140,120,0.18);
         }
 
         .stop-all-btn:hover {
-            box-shadow: 0 8px 20px rgba(255, 107, 107, 0.4);
-            transform: translateY(-2px);
+            transform: translateY(-6px);
+            box-shadow: 0 24px 60px rgba(255,140,120,0.2);
         }
 
         /* Config Tab Styles */
@@ -318,18 +324,20 @@
 
         .form-btn {
             padding: 10px 20px;
-            background: #667eea;
-            color: white;
+            --btn-gradient: linear-gradient(135deg, #7bffb2 0%, #6bd3ff 100%);
+            background: var(--btn-gradient);
+            color: #06303a;
             border: none;
-            border-radius: 8px;
+            border-radius: 10px;
             cursor: pointer;
-            font-weight: 600;
-            transition: all 0.3s ease;
+            font-weight: 700;
+            transition: transform 0.12s ease, box-shadow 0.12s ease;
+            box-shadow: 0 8px 18px rgba(0,0,0,0.08);
         }
 
         .form-btn:hover {
-            background: #764ba2;
-            transform: translateY(-2px);
+            transform: translateY(-4px);
+            box-shadow: 0 16px 36px rgba(0,0,0,0.12);
         }
 
         .config-list {
