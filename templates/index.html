@@ -1079,6 +1079,28 @@
         async function sendAIMessage() {
             const msg = document.getElementById('aiMessage').value.trim();
             if (!msg) return;
+
+            // Fetch latest AI config to avoid unnecessary provider requests
+            try {
+                const cfgResp = await fetch('/api/ai/config');
+                const cfg = await cfgResp.json();
+                if (!cfg.enabled) {
+                    appendAIConversation('AI (error)', 'AI integration is disabled on the server');
+                    updateStatus('AI disabled', false);
+                    return;
+                }
+                if (!cfg.api_key_configured) {
+                    appendAIConversation('AI (error)', 'AI API key not configured on server');
+                    updateStatus('AI API key not configured', false);
+                    return;
+                }
+            } catch (err) {
+                // If config fetch fails, show a helpful message and avoid provider call
+                appendAIConversation('AI (error)', 'Failed to verify AI configuration');
+                updateStatus('Failed to verify AI configuration', false);
+                return;
+            }
+
             appendAIConversation('You', msg);
             document.getElementById('aiMessage').value = '';
             try {
@@ -1092,7 +1114,9 @@
                     appendAIConversation('AI', res.reply);
                     updateStatus('AI: ' + res.reply, true);
                 } else if (res.error) {
-                    appendAIConversation('AI (error)', res.error);
+                    // If provider returned a detailed error (e.g., status/text), display a helpful message
+                    const errText = res.error + (res.status ? ` (status ${res.status})` : '') + (res.details ? ` — ${res.details}` : '');
+                    appendAIConversation('AI (error)', errText);
                     updateStatus('AI error', false);
                 }
                 if (res.executed) {
@@ -1101,6 +1125,7 @@
                 }
             } catch (err) {
                 console.error('Chat failed', err);
+                appendAIConversation('AI (error)', 'Chat failed: ' + String(err));
                 updateStatus('AI chat failed', false);
             }
         }

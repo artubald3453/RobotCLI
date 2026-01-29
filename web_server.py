@@ -144,10 +144,12 @@ def generate_ai_schema():
 
 @app.route('/api/ai/config', methods=['GET'])
 def get_ai_config():
-    """Return current AI configuration (key masked)."""
+    """Return current AI configuration (key masked) and a boolean flag indicating if a key is configured."""
     masked = AI_SETTINGS.copy()
+    has_key = bool(AI_SETTINGS.get('api_key'))
     if masked.get('api_key'):
         masked['api_key'] = '****' + (masked['api_key'][-4:] if isinstance(masked['api_key'], str) else '')
+    masked['api_key_configured'] = has_key
     return jsonify(masked)
 
 
@@ -237,7 +239,9 @@ def ai_chat():
         return jsonify({'error': f'Provider request failed: {e}'}), 502
 
     if resp.status_code != 200:
-        return jsonify({'error': 'Provider returned error', 'details': resp.text}), 502
+        # Include limited provider details for easier debugging (truncate to keep responses small)
+        snippet = (resp.text or '')[:400]
+        return jsonify({'error': 'Provider returned error', 'status': resp.status_code, 'details': snippet}), 502
 
     try:
         body = resp.json()
