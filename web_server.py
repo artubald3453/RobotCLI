@@ -9,7 +9,9 @@ from flask import Flask, render_template, jsonify, request
 import RPi.GPIO as GPIO
 import threading
 import time
-from config import GPIO_PINS, ALIASES, GROUPS, save_config, load_config
+import requests
+import json
+from config import GPIO_PINS, ALIASES, GROUPS, AI_SETTINGS, save_config, load_config
 
 app = Flask(__name__)
 
@@ -70,6 +72,345 @@ def get_config():
         'groups': GROUPS,
         'gpio_pins': GPIO_PINS
     })
+
+
+# ---- AI Integration Endpoints ----
+def generate_ai_schema():
+    """Dynamically generate a JSON Schema that describes valid AI commands.
+
+    The schema auto-updates based on configured aliases and groups so the
+    AI can discover exactly what it can control. Additionally supports
+    an array-of-commands payload for multi-command execution.
+    """
+    aliases = list(ALIASES.keys())
+    groups = list(GROUPS.keys())
+
+    single_cmd = {
+        'title': 'RobotCLI AI Single Command',
+        'type': 'object',
+        'properties': {
+            'action': {'type': 'string', 'enum': ['activate_alias', 'activate_group', 'stop', 'status']},
+            'target': {'type': 'string'},
+            'duration': {'type': 'number', 'minimum': 0.0},
+        },
+        'required': ['action'],
+        'oneOf': [
+            {
+                'properties': {
+                    'action': {'const': 'activate_alias'},
+                    'target': {'enum': aliases},
+                    'duration': {'type': 'number', 'minimum': 0.1}
+                },
+                'required': ['action', 'target']
+            },
+            {
+                'properties': {
+                    'action': {'const': 'activate_group'},
+                    'target': {'enum': groups},
+                    'duration': {'type': 'number', 'minimum': 0.1}
+                },
+                'required': ['action', 'target']
+            },
+            {
+                'properties': {
+                    'action': {'const': 'stop'},
+                    'target': {'enum': aliases + groups}
+                },
+                'required': ['action', 'target']
+            },
+            {
+                'properties': {
+                    'action': {'const': 'status'}
+                },
+                'required': ['action']
+            }
+        ]
+    }
+
+    schema = {
+        'title': 'RobotCLI AI Command Schema',
+        'description': 'Either a single command object or an array of command objects (multi-command).',
+        'oneOf': [
+            single_cmd,
+            {
+                'type': 'array',
+                'items': single_cmd,
+                'minItems': 1
+            }
+        ]
+    }
+    return schema
+
+
+@app.route('/api/ai/config', methods=['GET'])
+def get_ai_config():
+    """Return current AI configuration (key masked)."""
+    masked = AI_SETTINGS.copy()
+    if masked.get('api_key'):
+        masked['api_key'] = '****' + (masked['api_key'][-4:] if isinstance(masked['api_key'], str) else '')
+    return jsonify(masked)
+
+
+@app.route('/api/ai/register', methods=['POST'])
+def register_ai():
+    """Register or update AI settings (key, model, enabled)."""
+    data = request.json or {}
+    api_key = data.get('api_key')
+    model = data.get('model')
+    enabled = bool(data.get('enabled', True))
+
+    AI_SETTINGS['api_key'] = api_key
+    AI_SETTINGS['model'] = model
+    AI_SETTINGS['enabled'] = enabled
+    save_config()
+
+    masked_key = None
+    if AI_SETTINGS.get('api_key'):
+        ak = AI_SETTINGS['api_key']
+        masked_key = '****' + (ak[-4:] if isinstance(ak, str) and len(ak) > 4 else '')
+
+    return jsonify({'success': True, 'ai': {
+        'enabled': AI_SETTINGS['enabled'],
+        'model': AI_SETTINGS['model'],
+        'api_key': masked_key
+    }})
+
+
+@app.route('/api/ai/schema', methods=['GET'])
+def get_ai_schema():
+    """Return the generated JSON schema for AI commands."""
+    return jsonify(generate_ai_schema())
+
+
+@app.route('/api/ai/chat', methods=['POST'])
+def ai_chat():
+    """Accept natural language from a user (or AI) and proxy to the configured model.
+
+    The model is instructed to reply with a short human-friendly message ("response")
+    and a JSON array "commands" containing one or more commands that conform to
+    the generated schema. The server will validate/parse and execute those commands
+    safely (simple validation), then return the model's response back to the UI.
+    """
+    data = request.json or {}
+    user_msg = data.get('message')
+    # For chat coming from the local UI we use the stored AI_SETTINGS api key
+    # and therefore do not require the caller to present the key. We still
+    # require AI integration to be enabled and a server-side API key to exist.
+    if not AI_SETTINGS.get('enabled'):
+        return jsonify({'error': 'AI access disabled'}), 400
+    if not AI_SETTINGS.get('api_key'):
+        return jsonify({'error': 'AI API key not configured on server'}), 400
+    if not user_msg:
+        return jsonify({'error': 'Missing message'}), 400
+
+    # Build a system prompt that instructs the model to respond with JSON
+    system_prompt = (
+        "You are a RobotCLI assistant. When given a user instruction, produce a JSON object only. "
+        "Format exactly as: {\"response\":\"<short human-readable reply>\", \"commands\": [ ... ]}. "
+        "Commands must follow the RobotCLI AI Command Schema: actions: activate_alias, activate_group, stop, status. "
+        "Return no additional text, explanation, or code fences. Keep the response short (one sentence)."
+    )
+
+    # Prepare messages for OpenAI-like chat completion
+    messages = [
+        { 'role': 'system', 'content': system_prompt },
+        { 'role': 'user', 'content': user_msg }
+    ]
+
+    # Call provider (OpenAI-compatible)
+    try:
+        resp = requests.post(
+            'https://api.openai.com/v1/chat/completions',
+            headers={
+                'Authorization': 'Bearer ' + AI_SETTINGS['api_key'],
+                'Content-Type': 'application/json'
+            },
+            json={
+                'model': AI_SETTINGS.get('model') or 'gpt-4o-mini',
+                'messages': messages,
+                'temperature': 0.0,
+                'max_tokens': 512
+            },
+            timeout=20
+        )
+    except Exception as e:
+        return jsonify({'error': f'Provider request failed: {e}'}), 502
+
+    if resp.status_code != 200:
+        return jsonify({'error': 'Provider returned error', 'details': resp.text}), 502
+
+    try:
+        body = resp.json()
+        content = body['choices'][0]['message']['content']
+    except Exception as e:
+        return jsonify({'error': 'Malformed provider response', 'details': str(e)}), 502
+
+    # Extract JSON object from content
+    parsed = None
+    try:
+        parsed = json.loads(content)
+    except Exception:
+        # Try to locate a JSON block inside the text
+        start = content.find('{')
+        end = content.rfind('}')
+        if start != -1 and end != -1 and end > start:
+            try:
+                parsed = json.loads(content[start:end+1])
+            except Exception:
+                parsed = None
+
+    if not parsed or 'response' not in parsed:
+        return jsonify({'error': 'Provider did not return valid JSON with `response`', 'raw': content}), 502
+
+    # Validate and execute commands if present
+    commands = parsed.get('commands', [])
+    executed = []
+    if isinstance(commands, dict):
+        commands = [commands]
+    for cmd in commands:
+        # Basic validation: must have action
+        if not isinstance(cmd, dict) or 'action' not in cmd:
+            executed.append({'error': 'Invalid command format', 'cmd': cmd})
+            continue
+        res = _execute_single_command(cmd)
+        executed.append(res)
+
+    # Return only the model's short reply to the UI plus execution report
+    return jsonify({'reply': parsed.get('response'), 'executed': executed})
+
+
+def _execute_single_command(cmd):
+    """Execute a single normalized command dict and return result dict."""
+    action = cmd.get('action')
+    target = cmd.get('target')
+    duration = float(cmd.get('duration', 1.0)) if cmd.get('duration') is not None else 1.0
+
+    if action == 'activate_alias':
+        if target not in ALIASES:
+            return {'error': 'Unknown alias', 'cmd': cmd}
+        a = ALIASES[target]
+        if isinstance(a, str):
+            config_spot = a
+            auto_off = True
+        else:
+            config_spot = a.get('config_spot')
+            auto_off = bool(a.get('auto_off', True))
+        pin_num = GPIO_PINS.get(config_spot)
+        if pin_num is None or pin_num not in VALID_PINS:
+            return {'error': 'Alias not mapped to a valid pin', 'cmd': cmd}
+        if auto_off:
+            activate_pin(pin_num, duration)
+        else:
+            with lock:
+                GPIO.output(pin_num, GPIO.HIGH)
+                active_pins[pin_num] = None
+        return {'success': True, 'action': action, 'alias': target, 'duration': duration}
+
+    if action == 'activate_group':
+        if target not in GROUPS:
+            return {'error': 'Unknown group', 'cmd': cmd}
+        grp = GROUPS[target]
+        aliases = grp.get('aliases', []) if isinstance(grp, dict) else grp
+        activated = []
+        for alias in aliases:
+            if alias in ALIASES:
+                a = ALIASES[alias]
+                if isinstance(a, str):
+                    config_spot = a
+                    auto_off = True
+                else:
+                    config_spot = a.get('config_spot')
+                    auto_off = bool(a.get('auto_off', True))
+                pin_num = GPIO_PINS.get(config_spot)
+                if pin_num is None or pin_num not in VALID_PINS:
+                    continue
+                if auto_off:
+                    activate_pin(pin_num, duration)
+                else:
+                    with lock:
+                        GPIO.output(pin_num, GPIO.HIGH)
+                        active_pins[pin_num] = None
+                activated.append({'alias': alias, 'pin': pin_num})
+        return {'success': True, 'action': action, 'group': target, 'activated': activated, 'duration': duration}
+
+    if action == 'stop':
+        # target may be alias or group
+        if target in ALIASES:
+            a = ALIASES[target]
+            config_spot = a.get('config_spot') if isinstance(a, dict) else a
+            pin_num = GPIO_PINS.get(config_spot)
+            if pin_num is None:
+                return {'error': 'Alias not mapped to a valid GPIO pin', 'cmd': cmd}
+            with lock:
+                GPIO.output(pin_num, GPIO.LOW)
+                if pin_num in active_pins:
+                    del active_pins[pin_num]
+            return {'success': True, 'stopped': target}
+        elif target in GROUPS:
+            grp = GROUPS[target]
+            aliases = grp.get('aliases', []) if isinstance(grp, dict) else grp
+            stopped = []
+            for alias in aliases:
+                if alias in ALIASES:
+                    a = ALIASES[alias]
+                    config_spot = a.get('config_spot') if isinstance(a, dict) else a
+                    pin_num = GPIO_PINS.get(config_spot)
+                    if pin_num is None:
+                        continue
+                    with lock:
+                        GPIO.output(pin_num, GPIO.LOW)
+                        if pin_num in active_pins:
+                            del active_pins[pin_num]
+                    stopped.append(alias)
+            return {'success': True, 'stopped': stopped}
+        else:
+            return {'error': 'Unknown target for stop', 'cmd': cmd}
+
+    if action == 'status':
+        with lock:
+            status = {}
+            current_time = time.time()
+            for pin_num, end_time in active_pins.items():
+                if end_time is None:
+                    status[str(pin_num)] = None
+                else:
+                    remaining = max(0, end_time - current_time)
+                    status[str(pin_num)] = remaining
+        return {'success': True, 'status': status}
+
+    return {'error': 'Unknown action', 'cmd': cmd}
+
+
+@app.route('/api/ai/execute', methods=['POST'])
+def ai_execute():
+    """Allow an authorized AI to execute a command described by the schema.
+
+    Supports a single `command` or an array `commands` (multi-command).
+    Requires AI to be enabled and the provided api_key to match the configured key.
+    """
+    data = request.json or {}
+    api_key = data.get('api_key') or request.headers.get('Authorization', '').replace('Bearer ', '')
+    if not AI_SETTINGS.get('enabled'):
+        return jsonify({'error': 'AI access disabled'}), 400
+    if not AI_SETTINGS.get('api_key'):
+        return jsonify({'error': 'AI API key not configured on server'}), 400
+    if api_key != AI_SETTINGS.get('api_key'):
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    # Accept either a single command or an array of commands
+    commands = []
+    if 'commands' in data:
+        commands = data.get('commands') or []
+    elif 'command' in data:
+        commands = [data.get('command')]
+    else:
+        return jsonify({'error': 'Missing command(s)'}), 400
+
+    results = []
+    for cmd in commands:
+        results.append(_execute_single_command(cmd))
+
+    return jsonify({'success': True, 'results': results})
 
 
 @app.route('/api/config/reload', methods=['POST'])

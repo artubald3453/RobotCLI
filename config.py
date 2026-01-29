@@ -123,6 +123,14 @@ GROUPS = {
     "all_off": {"aliases": list(ALIASES.keys()), "action": "off"},
 }
 
+# ---- AI integration settings ----
+# The user should only need to enter an API key and a model name.
+AI_SETTINGS = {
+    'enabled': False,
+    'api_key': None,
+    'model': None,
+}
+
 # ---- Persistent config storage (JSON) ----
 import json
 import os
@@ -138,6 +146,7 @@ def _save_json():
             'GPIO_PINS': GPIO_PINS,
             'ALIASES': ALIASES,
             'GROUPS': GROUPS,
+            'AI_SETTINGS': AI_SETTINGS,
         }
         tmp = CONFIG_FILE + '.tmp'
         try:
@@ -197,6 +206,12 @@ def _load_json():
                     GROUPS[k] = {'aliases': v, 'action': 'on'}
                 elif isinstance(v, dict):
                     GROUPS[k] = {'aliases': v.get('aliases', []), 'action': v.get('action', 'on')}
+        # Load AI settings if present
+        ai = data.get('AI_SETTINGS')
+        if isinstance(ai, dict):
+            AI_SETTINGS['enabled'] = bool(ai.get('enabled', False))
+            AI_SETTINGS['api_key'] = ai.get('api_key')
+            AI_SETTINGS['model'] = ai.get('model')
     except Exception as e:
         print(f"⚠️ Failed loading config from {CONFIG_FILE}: {e}")
     # Save normalized structure back to disk so config.json is consistent

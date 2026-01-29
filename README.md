@@ -287,3 +287,40 @@ Then run: `motor_new(5)`
 - **AI API Control** - Integrate with AI APIs and let them use RobotCLI!
 - **Performance Metrics** - Track execution times and performance data
 - **AI API controll** - API any AI you want and let it use RobotCLI!
+
+## AI Integration
+You can register an API key and model in the web UI (open the `AI` tab). The server exposes endpoints:
+
+- `GET /api/ai/config` — returns current AI configuration (key masked)
+- `POST /api/ai/register` — register/update API key/model (`{ api_key, model, enabled }`)
+- `GET /api/ai/schema` — returns a JSON Schema that describes valid AI commands (auto-updates based on configured aliases/groups)
+- `POST /api/ai/execute` — execute a command (`{ api_key?, command: { action, target?, duration? } }`). API key may be supplied in body or Authorization header as `Bearer <key>`.
+
+The AI JSON Schema is generated from your current `ALIASES` and `GROUPS` so the AI only sees valid actions. The user only needs to enter an API key and model in the web UI to enable AI access.
+
+Chat UI
+-------
+A chat interface is available under the **AI** tab in the web UI. Type natural language requests and the configured model will reply with a short human-friendly message (e.g., "Okay, pin moving"). The model is instructed to return a JSON payload of commands; the server validates and executes those commands (single or multiple).
+
+OpenAI compatibility
+--------------------
+RobotCLI is compatible with **OpenAI-compatible** chat APIs by default. The server proxies requests to an OpenAI-style chat completion endpoint and expects the configured model to be an OpenAI-compatible model (for example: `gpt-4`, `gpt-4o-mini`, `gpt-4-mini`). Set the model under the AI settings in the web UI.
+
+Expected model output (JSON)
+---------------------------
+The model is prompted to return a compact JSON object only, for example:
+
+{
+  "response": "Okay, turning on the lights",
+  "commands": [
+    { "action": "activate_alias", "target": "led_1", "duration": 2 }
+  ]
+}
+
+The server will validate and execute any commands present in the `commands` array and return a short reply to show in the chat UI.
+
+Security & Disclaimer
+---------------------
+By entering your API key into the RobotCLI UI, you accept responsibility for its security. RobotCLI stores the key locally in `config.json` and will use it to proxy requests to the model provider. The project is not responsible for API key compromise or misuse — secure your device and network appropriately.
+
+An example client script is included at `ai_client.py` showing how to register and call the schema/execute endpoints.

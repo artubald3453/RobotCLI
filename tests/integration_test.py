@@ -54,6 +54,27 @@ def main():
         # Activate group (action=off) - should turn pins off
         post_json('/api/activate-group', {'group': 'test_off_group', 'duration': 0.5})
 
+        # Test AI endpoints: register, get schema, and execute status
+        post_json('/api/ai/register', {'api_key': 'testkey', 'model': 'test-model', 'enabled': True})
+        get_json('/api/ai/schema')
+        # Without key execute should be unauthorized (expect failure)
+        try:
+            post_json('/api/ai/execute', {'command': {'action': 'status'}})
+        except Exception as e:
+            print('Expected unauthorized for AI execute without key')
+
+        # With correct key should succeed (status)
+        post_json('/api/ai/execute', {'api_key': 'testkey', 'command': {'action': 'status'}})
+
+        # Try a chat request (likely provider is not reachable in CI) — tolerate failure
+        try:
+            r = requests.post(BASE + '/api/ai/chat', json={'message': 'Status please'})
+            print('/api/ai/chat', r.status_code, r.text)
+            # If provider responded OK, ensure json has reply or error
+            r.raise_for_status()
+        except Exception as e:
+            print('AI chat request failed as expected in offline environment')
+
         # Cleanup: Delete alias
         r = requests.delete(BASE + '/api/config/aliases', json={'name': 'test_motor'})
         print('/api/config/aliases DELETE', r.status_code, r.text)
