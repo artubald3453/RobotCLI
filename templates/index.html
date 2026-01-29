@@ -365,6 +365,30 @@
             color: #666;
         }
 
+        /* Badges and status dots */
+        .badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 0.8em;
+            margin-left: 8px;
+        }
+        .badge.indef { background: #ff6b6b; color: white; }
+        .badge.active { background: #4caf50; color: white; }
+        .badge.auto-yes { background: #6bd3ff; color: #06303a; }
+        .badge.auto-no { background: #ffc371; color: #06303a; }
+
+        .status-dot {
+            display:inline-block;
+            width:10px;
+            height:10px;
+            border-radius:50%;
+            margin-left:8px;
+            vertical-align:middle;
+        }
+        .status-dot.indef { background:#ff3b30; box-shadow: 0 0 6px rgba(255,59,48,0.6); }
+        .status-dot.timed { background:#4caf50; box-shadow: 0 0 6px rgba(76,175,80,0.4); }
+
         @media (max-width: 600px) {
             .container {
                 padding: 20px;
@@ -497,12 +521,14 @@
     <script>
         let duration = 1;
         let config = {};
+        let status = {}; // current active pin statuses (from /api/status)
 
         // Load configuration from server
         async function loadConfig() {
             try {
-                const response = await fetch('/api/config');
-                config = await response.json();
+                const [cfgResp, statusResp] = await Promise.all([fetch('/api/config'), fetch('/api/status')]);
+                config = await cfgResp.json();
+                status = await statusResp.json();
                 renderControls();
                 loadConfigDisplay();
             } catch (error) {
@@ -565,7 +591,20 @@
                 for (const btn of category.items) {
                     const button = document.createElement('button');
                     button.className = `control-btn ${key}-btn`;
-                    button.textContent = btn.name.toUpperCase();
+                    const aliasName = btn.name;
+                    // determine current status for alias (from status and config)
+                    let aliasVal = config.aliases && config.aliases[aliasName];
+                    let spot = aliasVal && aliasVal.config_spot ? aliasVal.config_spot : aliasVal;
+                    let pin = config.gpio_pins && config.gpio_pins[spot];
+                    let s = null;
+                    if (typeof pin !== 'undefined' && pin !== null) {
+                        s = (status[String(pin)] !== undefined) ? status[String(pin)] : status[pin];
+                    }
+                    let statusHtml = '';
+                    if (s === null) statusHtml = '<span class="status-dot indef" title="Active (indefinite)"></span>';
+                    else if (typeof s === 'number' && s > 0) statusHtml = '<span class="status-dot timed" title="Active (timed)"></span>';
+
+                    button.innerHTML = `${btn.name.toUpperCase()} ${statusHtml}`;
                     button.onclick = btn.onclick;
                     grid.appendChild(button);
                 }
@@ -590,13 +629,22 @@
                 // val may be a string (legacy) or an object {config_spot, auto_off}
                 let spot = val && val.config_spot ? val.config_spot : val;
                 let autoOff = val && (typeof val.auto_off !== 'undefined') ? val.auto_off : true;
+                let pin = config.gpio_pins && config.gpio_pins[spot];
+                let s = null;
+                if (typeof pin !== 'undefined' && pin !== null) {
+                    s = (status[String(pin)] !== undefined) ? status[String(pin)] : status[pin];
+                }
+                let statusBadge = '';
+                if (s === null) statusBadge = '<span class="badge indef">Active (indef)</span>';
+                else if (typeof s === 'number' && s > 0) statusBadge = '<span class="badge active">Active</span>';
+                let autoBadge = autoOff ? '<span class="badge auto-yes">Auto-off</span>' : '<span class="badge auto-no">Hold</span>';
+
                 const item = document.createElement('div');
                 item.className = 'config-item';
                 item.innerHTML = `
                     <div>
-                        <div class="config-item-key">${name}</div>
+                        <div class="config-item-key">${name} ${statusBadge} ${autoBadge}</div>
                         <div class="config-item-value">${spot}</div>
-                        <div class="config-item-value">Auto-off: ${autoOff ? 'Yes' : 'No'}</div>
                     </div>
                     <div>
                         <button class="form-btn" onclick="toggleAutoOff('${name}', ${autoOff})">Toggle Auto-off</button>
