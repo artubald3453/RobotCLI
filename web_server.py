@@ -235,6 +235,7 @@ def ai_chat():
     """
     data = request.json or {}
     user_msg = data.get('message')
+    history = data.get('history')
     # For chat coming from the local UI we use the stored AI_SETTINGS api key
     # and therefore do not require the caller to present the key. We still
     # require AI integration to be enabled and a server-side API key to exist.
@@ -244,6 +245,10 @@ def ai_chat():
         return jsonify({'error': 'AI API key not configured on server'}), 400
     if not user_msg:
         return jsonify({'error': 'Missing message'}), 400
+
+    # Validate history shape if present
+    if history is not None and not isinstance(history, list):
+        return jsonify({'error': 'Invalid history format; must be an array of {role,content} objects'}), 400
 
     # Build a system prompt that instructs the model to respond with JSON
     system_prompt = (
