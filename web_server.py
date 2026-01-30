@@ -251,6 +251,7 @@ def ai_chat():
         "Format exactly as: {\"response\":\"<short human-readable reply>\", \"commands\": [ ... ]}. "
         "Commands must follow the RobotCLI AI Command Schema: actions: activate_alias, activate_group, stop, status. "
         "Durations must be numbers and expressed in seconds (e.g., 40). Do not include units or string values in the JSON `duration` field. "
+        "If provided, consider previous messages in the `history` array to interpret user intent and context. "
         "Example: {\"response\":\"Okay, turning on the light\", \"commands\": [{\"action\":\"activate_alias\",\"target\":\"led_1\",\"duration\":40}]}" 
         "Return no additional text, explanation, or code fences. Keep the response short (one sentence)."
     )
@@ -260,6 +261,22 @@ def ai_chat():
         { 'role': 'system', 'content': system_prompt },
         { 'role': 'user', 'content': user_msg }
     ]
+
+    # Build final messages for provider: system + history (if any) + user message
+    prov_messages = [ { 'role': 'system', 'content': system_prompt } ]
+    # 'history' is an array of { role: 'user'|'assistant'|'system', content: '...' }
+    if isinstance(history, list):
+        # Only include up to last 12 messages
+        for h in history[-12:]:
+            r = h.get('role') if isinstance(h.get('role'), str) else 'user'
+            c = h.get('content') if isinstance(h.get('content'), str) else str(h.get('content', ''))
+            if r not in ('user', 'assistant', 'system'):
+                r = 'user'
+            prov_messages.append({ 'role': r, 'content': c })
+    # Finally append the current user message
+    prov_messages.append({ 'role': 'user', 'content': user_msg })
+
+    logger.info('Sending %d messages to provider', len(prov_messages))
 
     # Call provider (OpenAI-compatible)
     try:
@@ -271,13 +288,14 @@ def ai_chat():
             },
             json={
                 'model': AI_SETTINGS.get('model') or 'gpt-4o-mini',
-                'messages': messages,
+                'messages': prov_messages,
                 'temperature': 0.0,
                 'max_tokens': 512
             },
             timeout=20
         )
     except Exception as e:
+        logger.exception('Provider request failed')
         return jsonify({'error': f'Provider request failed: {e}'}), 502
 
     if resp.status_code != 200:

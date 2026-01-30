@@ -547,6 +547,9 @@
                     <div id="aiChatWrap" style="background:#fff;padding:10px;border-radius:8px;">
                         <div id="aiConversation" style="height:160px;overflow:auto;padding:6px;border-radius:6px;background:#f6f9ff;border:1px solid #eef6ff;margin-bottom:8px"></div>
                         <textarea id="aiMessage" placeholder="Type a message for the AI (e.g., 'Turn on the lights for 2 seconds')" style="width:100%;height:60px;padding:8px;border-radius:6px;border:2px solid #eee;margin-bottom:8px"></textarea>
+                        <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+                            <label style="font-size:0.9em;color:#333"><input type="checkbox" id="aiShareHistory" checked> Share past conversation with model</label>
+                        </div>
                         <div style="display:flex;gap:8px">
                             <button class="form-btn" onclick="sendAIMessage()">Send</button>
                             <button class="form-btn" onclick="clearAIConversation()">Clear</button>
@@ -562,6 +565,7 @@
         let duration = 1;
         let config = {};
         let status = {}; // current active pin statuses (from /api/status)
+        let aiConversationHistory = [];
 
         // Load configuration from server
         async function loadConfig() {
@@ -1074,6 +1078,13 @@
             el.innerHTML = `<strong>${role}:</strong> ${text}`;
             conv.appendChild(el);
             conv.scrollTop = conv.scrollHeight;
+
+            // Maintain an in-memory conversation history for optional sharing with the model
+            // Map UI roles to model roles: 'You'->user, 'AI'->assistant, 'System'->system
+            const r = (role === 'You') ? 'user' : (role === 'AI' ? 'assistant' : 'system');
+            aiConversationHistory.push({ role: r, content: String(text) });
+            // Keep history bounded to last 20 messages
+            if (aiConversationHistory.length > 20) aiConversationHistory.shift();
         }
 
         async function sendAIMessage() {
@@ -1104,10 +1115,14 @@
             appendAIConversation('You', msg);
             document.getElementById('aiMessage').value = '';
             try {
+                // Build history to send if enabled
+                const shareHistory = document.getElementById('aiShareHistory').checked;
+                const historyToSend = shareHistory ? aiConversationHistory.slice(-12) : [];
+
                 const r = await fetch('/api/ai/chat', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ message: msg })
+                    body: JSON.stringify({ message: msg, history: historyToSend })
                 });
                 const res = await r.json();
                 if (res.reply) {
@@ -1155,6 +1170,7 @@
 
         function clearAIConversation() {
             document.getElementById('aiConversation').innerHTML = '';
+            aiConversationHistory = [];
         }
         async function saveAIConfig() {
             try {

@@ -317,7 +317,7 @@ The model is prompted to return a compact JSON object only, for example:
   ]
 }
 
-The server will validate and execute any commands present in the `commands` array and return a short reply to show in the chat UI.
+The server will validate and execute any commands present in the `commands` array and return a short reply to show in the chat UI. You can optionally enable "Share past conversation with model" in the AI chat UI so the model can use previous messages for context; this is sent to the provider as part of the chat request and is limited to recent messages.
 
 Security & Disclaimer
 ---------------------
