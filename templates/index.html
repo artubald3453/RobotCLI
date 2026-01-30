@@ -1124,7 +1124,18 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ message: msg, history: historyToSend })
                 });
-                const res = await r.json();
+                // Handle non-JSON responses gracefully
+                const text = await r.text();
+                let res;
+                try {
+                    res = JSON.parse(text);
+                } catch (err) {
+                    const snippet = text ? text.substring(0, 800) : '<empty response>';
+                    appendAIConversation('AI (error)', `Chat failed: server returned non-JSON response (status ${r.status}) — ${snippet}`);
+                    updateStatus('AI chat failed', false);
+                    return;
+                }
+
                 if (res.reply) {
                     appendAIConversation('AI', res.reply);
                     updateStatus('AI: ' + res.reply, true);

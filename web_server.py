@@ -832,6 +832,13 @@ def stop():
         return jsonify({'success': True, 'message': 'All pins stopped'})
 
 
+@app.errorhandler(Exception)
+def handle_unhandled_exception(e):
+    logger.exception('Unhandled exception')
+    # Return JSON to clients so UI parsing remains consistent
+    return jsonify({'error': 'Internal server error', 'details': str(e)}), 500
+
+
 if __name__ == '__main__':
     try:
         print("🤖 RobotCLI Web Server starting...")
