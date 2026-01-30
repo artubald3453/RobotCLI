@@ -11,7 +11,47 @@ import threading
 import time
 import requests
 import json
+import logging
+import re
 from config import GPIO_PINS, ALIASES, GROUPS, AI_SETTINGS, save_config, load_config
+
+# Basic logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+
+def _parse_duration(value):
+    """Parse duration expressed as number or string like '40 seconds' or '2 min'.
+
+    Returns float seconds or raises ValueError if cannot parse.
+    """
+    if value is None:
+        return 1.0
+    if isinstance(value, (int, float)):
+        return float(value)
+    s = str(value).strip().lower()
+    # Find numeric portion
+    m = re.search(r'([0-9]+(?:\.[0-9]+)?)', s)
+    if m:
+        num = float(m.group(1))
+        if re.search(r'\b(h|hr|hour|hours)\b', s):
+            return num * 3600.0
+        if re.search(r'\b(m|min|minute|minutes)\b', s):
+            return num * 60.0
+        # default seconds
+        return num
+    # Fallback: try some small word-number map
+    words_map = {
+        'one': 1, 'two': 2, 'three': 3, 'four': 4, 'five': 5,
+        'six': 6, 'seven': 7, 'eight': 8, 'nine': 9, 'ten': 10,
+        'forty': 40
+    }
+    for w, v in words_map.items():
+        if re.search(r'\b' + w + r'\b', s):
+            if re.search(r'\b(m|min|minute)\b', s):
+                return float(v) * 60.0
+            return float(v)
+    raise ValueError(f'Cannot parse duration: {value}')
 
 app = Flask(__name__)
 
@@ -210,6 +250,8 @@ def ai_chat():
         "You are a RobotCLI assistant. When given a user instruction, produce a JSON object only. "
         "Format exactly as: {\"response\":\"<short human-readable reply>\", \"commands\": [ ... ]}. "
         "Commands must follow the RobotCLI AI Command Schema: actions: activate_alias, activate_group, stop, status. "
+        "Durations must be numbers and expressed in seconds (e.g., 40). Do not include units or string values in the JSON `duration` field. "
+        "Example: {\"response\":\"Okay, turning on the light\", \"commands\": [{\"action\":\"activate_alias\",\"target\":\"led_1\",\"duration\":40}]}" 
         "Return no additional text, explanation, or code fences. Keep the response short (one sentence)."
     )
 
@@ -247,7 +289,11 @@ def ai_chat():
         body = resp.json()
         content = body['choices'][0]['message']['content']
     except Exception as e:
+        logger.exception('Malformed provider response')
         return jsonify({'error': 'Malformed provider response', 'details': str(e)}), 502
+
+    # Log provider content for debugging
+    logger.info('AI provider content: %s', (content[:1000] + '...') if len(content) > 1000 else content)
 
     # Extract JSON object from content
     parsed = None
@@ -260,14 +306,24 @@ def ai_chat():
         if start != -1 and end != -1 and end > start:
             try:
                 parsed = json.loads(content[start:end+1])
-            except Exception:
+            except Exception as e:
+                logger.info('Failed to extract JSON from provider content: %s', e)
                 parsed = None
 
     if not parsed or 'response' not in parsed:
-        return jsonify({'error': 'Provider did not return valid JSON with `response`', 'raw': content}), 502
+        # Return provider raw content to help debugging but keep it short
+        snippet = (content[:600] + '...') if len(content) > 600 else content
+        logger.info('Provider did not return valid JSON with response: %s', snippet)
+        return jsonify({'error': 'Provider did not return valid JSON with `response`', 'raw': snippet}), 502
 
+    logger.info('Parsed provider JSON: %s', parsed)
     # Validate and execute commands if present
     commands = parsed.get('commands', [])
+    if not commands:
+        # If the model returned no commands, surface that clearly
+        logger.info('Provider returned no commands; content: %s', content[:600])
+        return jsonify({'error': 'Provider returned no commands', 'raw': (content[:600] + '...') if len(content) > 600 else content}), 502
+
     executed = []
     if isinstance(commands, dict):
         commands = [commands]
@@ -276,7 +332,18 @@ def ai_chat():
         if not isinstance(cmd, dict) or 'action' not in cmd:
             executed.append({'error': 'Invalid command format', 'cmd': cmd})
             continue
-        res = _execute_single_command(cmd)
+        # Normalize duration if present and not numeric
+        if 'duration' in cmd:
+            try:
+                cmd['duration'] = _parse_duration(cmd['duration'])
+            except ValueError as e:
+                executed.append({'error': 'Invalid duration', 'details': str(e), 'cmd': cmd})
+                continue
+        try:
+            res = _execute_single_command(cmd)
+        except Exception as e:
+            logger.exception('Exception executing command')
+            res = {'error': 'Execution exception', 'details': str(e), 'cmd': cmd}
         executed.append(res)
 
     # Return only the model's short reply to the UI plus execution report
@@ -285,13 +352,26 @@ def ai_chat():
 
 def _execute_single_command(cmd):
     """Execute a single normalized command dict and return result dict."""
+    logger.info('Executing command: %s', cmd)
     action = cmd.get('action')
     target = cmd.get('target')
-    duration = float(cmd.get('duration', 1.0)) if cmd.get('duration') is not None else 1.0
+    # Parse duration safely and return a helpful error if invalid
+    duration_raw = cmd.get('duration')
+    if duration_raw is None:
+        duration = 1.0
+    else:
+        try:
+            duration = float(duration_raw)
+        except Exception:
+            res = {'error': f'Invalid duration: {duration_raw}', 'cmd': cmd}
+            logger.info('Command result: %s', res)
+            return res
 
     if action == 'activate_alias':
         if target not in ALIASES:
-            return {'error': 'Unknown alias', 'cmd': cmd}
+            res = {'error': 'Unknown alias', 'cmd': cmd}
+            logger.info('Command result: %s', res)
+            return res
         a = ALIASES[target]
         if isinstance(a, str):
             config_spot = a
@@ -301,18 +381,24 @@ def _execute_single_command(cmd):
             auto_off = bool(a.get('auto_off', True))
         pin_num = GPIO_PINS.get(config_spot)
         if pin_num is None or pin_num not in VALID_PINS:
-            return {'error': 'Alias not mapped to a valid pin', 'cmd': cmd}
+            res = {'error': 'Alias not mapped to a valid pin', 'cmd': cmd}
+            logger.info('Command result: %s', res)
+            return res
         if auto_off:
             activate_pin(pin_num, duration)
         else:
             with lock:
                 GPIO.output(pin_num, GPIO.HIGH)
                 active_pins[pin_num] = None
-        return {'success': True, 'action': action, 'alias': target, 'duration': duration}
+        res = {'success': True, 'action': action, 'alias': target, 'duration': duration, 'pin': pin_num}
+        logger.info('Command result: %s', res)
+        return res
 
     if action == 'activate_group':
         if target not in GROUPS:
-            return {'error': 'Unknown group', 'cmd': cmd}
+            res = {'error': 'Unknown group', 'cmd': cmd}
+            logger.info('Command result: %s', res)
+            return res
         grp = GROUPS[target]
         aliases = grp.get('aliases', []) if isinstance(grp, dict) else grp
         activated = []
@@ -335,7 +421,9 @@ def _execute_single_command(cmd):
                         GPIO.output(pin_num, GPIO.HIGH)
                         active_pins[pin_num] = None
                 activated.append({'alias': alias, 'pin': pin_num})
-        return {'success': True, 'action': action, 'group': target, 'activated': activated, 'duration': duration}
+        res = {'success': True, 'action': action, 'group': target, 'activated': activated, 'duration': duration}
+        logger.info('Command result: %s', res)
+        return res
 
     if action == 'stop':
         # target may be alias or group
@@ -344,12 +432,16 @@ def _execute_single_command(cmd):
             config_spot = a.get('config_spot') if isinstance(a, dict) else a
             pin_num = GPIO_PINS.get(config_spot)
             if pin_num is None:
-                return {'error': 'Alias not mapped to a valid GPIO pin', 'cmd': cmd}
+                res = {'error': 'Alias not mapped to a valid GPIO pin', 'cmd': cmd}
+                logger.info('Command result: %s', res)
+                return res
             with lock:
                 GPIO.output(pin_num, GPIO.LOW)
                 if pin_num in active_pins:
                     del active_pins[pin_num]
-            return {'success': True, 'stopped': target}
+            res = {'success': True, 'stopped': target, 'pin': pin_num}
+            logger.info('Command result: %s', res)
+            return res
         elif target in GROUPS:
             grp = GROUPS[target]
             aliases = grp.get('aliases', []) if isinstance(grp, dict) else grp
@@ -366,9 +458,13 @@ def _execute_single_command(cmd):
                         if pin_num in active_pins:
                             del active_pins[pin_num]
                     stopped.append(alias)
-            return {'success': True, 'stopped': stopped}
+            res = {'success': True, 'stopped': stopped}
+            logger.info('Command result: %s', res)
+            return res
         else:
-            return {'error': 'Unknown target for stop', 'cmd': cmd}
+            res = {'error': 'Unknown target for stop', 'cmd': cmd}
+            logger.info('Command result: %s', res)
+            return res
 
     if action == 'status':
         with lock:
@@ -380,9 +476,13 @@ def _execute_single_command(cmd):
                 else:
                     remaining = max(0, end_time - current_time)
                     status[str(pin_num)] = remaining
-        return {'success': True, 'status': status}
+        res = {'success': True, 'status': status}
+        logger.info('Command result: %s', res)
+        return res
 
-    return {'error': 'Unknown action', 'cmd': cmd}
+    res = {'error': 'Unknown action', 'cmd': cmd}
+    logger.info('Command result: %s', res)
+    return res
 
 
 @app.route('/api/ai/execute', methods=['POST'])

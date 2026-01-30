@@ -1119,9 +1119,32 @@
                     appendAIConversation('AI (error)', errText);
                     updateStatus('AI error', false);
                 }
-                if (res.executed) {
-                    const ok = res.executed.filter(e => e && e.success).length;
-                    if (ok > 0) updateStatus(`AI executed ${ok} command(s)`, true);
+
+                // Display execution results in the conversation for transparency
+                if (res.executed && Array.isArray(res.executed)) {
+                    for (const ex of res.executed) {
+                        if (ex && ex.success) {
+                            // Friendly messages for typical actions
+                            if (ex.action === 'activate_alias') {
+                                appendAIConversation('System', `Executed: turned ON ${ex.alias} (pin ${ex.pin}) for ${ex.duration}s`);
+                            } else if (ex.action === 'activate_group') {
+                                appendAIConversation('System', `Executed: activated group ${ex.group} (${(ex.activated||[]).length} items)`);
+                            } else if (ex.stopped) {
+                                appendAIConversation('System', `Executed: stopped ${Array.isArray(ex.stopped) ? ex.stopped.join(', ') : ex.stopped}`);
+                            } else if (ex.status) {
+                                appendAIConversation('System', `Status: ${JSON.stringify(ex.status)}`);
+                            } else {
+                                appendAIConversation('System', `Executed: ${JSON.stringify(ex)}`);
+                            }
+                        } else {
+                            appendAIConversation('System (error)', `Execution error: ${ex.error || JSON.stringify(ex)}`);
+                        }
+                    }
+                }
+
+                // If provider returned raw content in an error (for debugging), show it lightly
+                if (res.raw) {
+                    appendAIConversation('System (debug)', res.raw);
                 }
             } catch (err) {
                 console.error('Chat failed', err);
