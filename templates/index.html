@@ -506,7 +506,23 @@
                     <button class="form-btn" onclick="updateGPIOPin()">Update Mapping</button>
                     <button class="form-btn" style="background:#ff9a9e;color:#333;margin-left:8px" onclick="resetGPIODefaults()">Reset to Defaults</button> 
                 </div>
-                <div id="gpio-list" class="config-list"></div>
+                <div id="gpio-list" class="config-list">
+                    <h4>GPIO Pin Mappings:</h4>
+                    <div style="font-size:0.95em;color:#444;margin-bottom:10px">Click <strong>Set</strong> to update the physical pin for a config spot, or <strong>Assign Alias</strong> to bind an alias to that spot.</div>
+                    <div style="overflow:auto;max-height:360px">
+                        <table id="gpio-table" style="width:100%;border-collapse:collapse;">
+                            <thead>
+                                <tr style="text-align:left;border-bottom:2px solid #eee">
+                                    <th style="padding:8px">Config Spot</th>
+                                    <th style="padding:8px">Physical Pin</th>
+                                    <th style="padding:8px">Assigned Alias(es)</th>
+                                    <th style="padding:8px">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="gpio-table-body"></tbody>
+                        </table>
+                    </div>
+                </div>
             </div>
 
             <!-- Groups Section -->
@@ -726,10 +742,11 @@
 
                 const item = document.createElement('div');
                 item.className = 'config-item';
+                const pinText = (pin === null || typeof pin === 'undefined') ? '<em>Unmapped</em>' : 'Pin ' + pin;
                 item.innerHTML = `
                     <div>
                         <div class="config-item-key">${name} ${statusBadge} ${autoBadge}</div>
-                        <div class="config-item-value">${spot}</div>
+                        <div class="config-item-value">${spot} &nbsp; ${pinText}</div>
                     </div>
                     <div>
                         <button class="form-btn" onclick="toggleAutoOff('${name}', ${autoOff})">Toggle Auto-off</button>
@@ -742,22 +759,89 @@
 
         // Display GPIO pins
         function displayGPIOPins() {
-            const list = document.getElementById('gpio-list');
-            list.innerHTML = '<h4>GPIO Pin Mappings:</h4>';
-            for (const [spot, pin] of Object.entries(config.gpio_pins || {})) {
-                const item = document.createElement('div');
-                item.className = 'config-item';
-                const pinText = (pin === null || pin === undefined) ? 'Unmapped' : 'Pin ' + pin;
-                item.innerHTML = `
-                    <div>
-                        <div class="config-item-key">${spot}</div>
-                        <div class="config-item-value">${pinText}</div>
-                    </div>
-                    <div>
-                        <button class="form-btn" onclick="deleteGPIOPin('${spot}')">Delete</button>
-                    </div>
+            const tbody = document.getElementById('gpio-table-body');
+            tbody.innerHTML = '';
+
+            // If server didn't provide a mapping list, fall back to config_spot1..27
+            let spots = Object.keys(config.gpio_pins || {});
+            if (!spots || spots.length === 0) {
+                spots = [];
+                for (let i = 1; i <= 27; i++) spots.push('config_spot' + i);
+            }
+
+            for (const spot of spots) {
+                const pin = (config.gpio_pins && (spot in config.gpio_pins)) ? config.gpio_pins[spot] : null;
+                const pinText = (pin === null || typeof pin === 'undefined') ? 'Unmapped' : 'Pin ' + pin;
+
+                // Find aliases that reference this spot
+                const assigned = [];
+                for (const [name, val] of Object.entries(config.aliases || {})) {
+                    const sp = (val && val.config_spot) ? val.config_spot : val;
+                    if (sp === spot) assigned.push(name);
+                }
+
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td style="padding:8px;border-bottom:1px solid #f1f1f1">${spot}</td>
+                    <td style="padding:8px;border-bottom:1px solid #f1f1f1">${pinText}</td>
+                    <td style="padding:8px;border-bottom:1px solid #f1f1f1">${assigned.length ? assigned.join(', ') : '<em>None</em>'}</td>
+                    <td style="padding:8px;border-bottom:1px solid #f1f1f1">
+                        <input id="pin-in-${spot}" type="number" placeholder="2-27" min="2" max="27" style="width:80px;padding:6px;margin-right:6px" />
+                        <button class="form-btn" onclick="setPinInline('${spot}')" style="padding:6px 10px">Set</button>
+                        <button class="form-btn" onclick="assignAliasInline('${spot}')" style="padding:6px 10px;margin-left:6px">Assign Alias</button>
+                        ${ (pin !== null && typeof pin !== 'undefined') ? `<button class="form-btn" style="background:#ffecd2;color:#333;margin-left:6px" onclick="deleteGPIOPin('${spot}')">Delete</button>` : '' }
+                    </td>
                 `;
-                list.appendChild(item);
+                tbody.appendChild(tr);
+            }
+        }
+
+        // Inline set pin helper
+        async function setPinInline(spot) {
+            const el = document.getElementById('pin-in-' + spot);
+            const val = el && el.value ? parseInt(el.value) : null;
+            if (!val || val < 2 || val > 27) {
+                updateStatus('Please enter a valid pin number (2-27)', false);
+                return;
+            }
+            try {
+                const r = await fetch('/api/config/gpio-pins', {
+                    method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({config_spot: spot, pin_num: val})
+                });
+                const res = await r.json();
+                if (res.success) {
+                    updateStatus(`Mapped ${spot} to pin ${val}`, true);
+                    loadConfig();
+                } else {
+                    updateStatus('Error: ' + (res.error||JSON.stringify(res)), false);
+                }
+            } catch (err) {
+                console.error('Set pin failed', err);
+                updateStatus('Error setting pin', false);
+            }
+        }
+
+        // Inline assign alias helper
+        async function assignAliasInline(spot) {
+            const alias = prompt(`Assign an existing alias to ${spot}. Enter alias name:`);
+            if (!alias) return;
+            // If alias exists, keep its auto_off setting, otherwise create with auto_off=true
+            const existing = config.aliases && config.aliases[alias];
+            const auto_off = existing && typeof existing.auto_off !== 'undefined' ? existing.auto_off : true;
+            try {
+                const r = await fetch('/api/config/aliases', {
+                    method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({name: alias, config_spot: spot, auto_off: auto_off})
+                });
+                const res = await r.json();
+                if (res.success) {
+                    updateStatus(`Alias ${alias} assigned to ${spot}`, true);
+                    loadConfig();
+                } else {
+                    updateStatus('Error: ' + (res.error||JSON.stringify(res)), false);
+                }
+            } catch (err) {
+                console.error('Assign alias failed', err);
+                updateStatus('Error assigning alias', false);
             }
         }
 
