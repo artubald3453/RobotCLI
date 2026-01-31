@@ -85,6 +85,13 @@ def main():
         print('/api/config/gpio-pins DELETE', r.status_code, r.text)
         r.raise_for_status()
 
+        # Reset mappings back to defaults and verify
+        r = requests.post(BASE + '/api/config/gpio-pins/reset')
+        print('/api/config/gpio-pins/reset', r.status_code, r.text)
+        r.raise_for_status()
+        gp = get_json('/api/config/gpio-pins')
+        print('GPIO mapping after reset (sample):', list(gp.items())[:3])
+
         # Delete group
         r = requests.delete(BASE + '/api/config/groups', json={'name': 'test_off_group'})
         print('/api/config/groups DELETE', r.status_code, r.text)

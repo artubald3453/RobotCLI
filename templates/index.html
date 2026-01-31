@@ -504,6 +504,7 @@
                         <input type="number" id="gpioPinNum" placeholder="1-27" min="1" max="27">
                     </div>
                     <button class="form-btn" onclick="updateGPIOPin()">Update Mapping</button>
+                    <button class="form-btn" style="background:#ff9a9e;color:#333;margin-left:8px" onclick="resetGPIODefaults()">Reset to Defaults</button> 
                 </div>
                 <div id="gpio-list" class="config-list"></div>
             </div>
@@ -992,6 +993,24 @@
             } catch (err) {
                 console.error(err);
                 updateStatus('Error deleting group', false);
+            }
+        }
+
+        // Reset GPIO mapping to default
+        async function resetGPIODefaults() {
+            if (!confirm('Reset all GPIO mappings to defaults? This will overwrite current mappings.')) return;
+            try {
+                const r = await fetch('/api/config/gpio-pins/reset', { method: 'POST' });
+                const res = await r.json();
+                if (res.success) {
+                    updateStatus(res.message || 'GPIO mappings reset', true);
+                    loadConfig();
+                } else {
+                    updateStatus('Error resetting GPIO mappings: ' + (res.error || JSON.stringify(res)), false);
+                }
+            } catch (err) {
+                console.error('Reset failed', err);
+                updateStatus('Error resetting GPIO mappings', false);
             }
         }
 

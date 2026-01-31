@@ -13,7 +13,7 @@ import requests
 import json
 import logging
 import re
-from config import GPIO_PINS, ALIASES, GROUPS, AI_SETTINGS, save_config, load_config
+from config import GPIO_PINS, ALIASES, GROUPS, AI_SETTINGS, save_config, load_config, reset_gpio_pins_to_defaults
 
 # Basic logging
 logging.basicConfig(level=logging.INFO)
@@ -645,6 +645,17 @@ def manage_gpio_pins():
     GPIO_PINS[config_spot] = pin_num
     save_config()
     return jsonify({'success': True, 'config_spot': config_spot, 'pin_num': pin_num})
+
+
+@app.route('/api/config/gpio-pins/reset', methods=['POST'])
+def reset_gpio_pins():
+    """Reset GPIO pin mappings back to defaults"""
+    try:
+        reset_gpio_pins_to_defaults()
+        return jsonify({'success': True, 'message': 'GPIO pins reset to defaults', 'gpio_pins': GPIO_PINS})
+    except Exception as e:
+        logger.exception('Reset GPIO defaults failed')
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/api/config/groups', methods=['GET', 'POST', 'DELETE'])

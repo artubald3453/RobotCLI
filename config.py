@@ -37,6 +37,9 @@ GPIO_PINS = {
     "config_spot27": None,
 }
 
+# Keep an immutable copy of the original default GPIO mapping so we can restore it
+DEFAULT_GPIO_PINS = dict(GPIO_PINS)
+
 
 # ---- User-friendly aliases ----
 # These are the names the USER types into the terminal.
@@ -168,6 +171,14 @@ def save_config():
         _save_json()
     except Exception as e:
         print(f"⚠️ Failed saving config to {CONFIG_FILE}: {e}")
+
+
+def reset_gpio_pins_to_defaults():
+    """Reset GPIO_PINS mapping back to the original defaults and persist."""
+    with _config_lock:
+        GPIO_PINS.clear()
+        GPIO_PINS.update(DEFAULT_GPIO_PINS)
+        save_config()
 
 
 def _load_json():
