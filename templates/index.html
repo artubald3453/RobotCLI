@@ -538,7 +538,7 @@
                         <option value="26"></option>
                         <option value="27"></option>
                     </datalist>
-                    <div style="font-size:0.95em;color:#444;margin-bottom:10px">Click <strong>Set</strong> to update the physical pin for a config spot, or <strong>Assign Alias</strong> to bind an alias to that spot.</div>
+                    <div style="font-size:0.95em;color:#444;margin-bottom:10px">Reference only: below is a read-only list of <strong>config_spot1–config_spot27</strong>. Use the <strong>Use</strong> button to copy the spot into the <em>Add New Alias</em> form.</div>
                     <div style="overflow:auto;max-height:360px">
                         <table id="gpio-table" style="width:100%;border-collapse:collapse;">
                             <thead>
@@ -816,10 +816,8 @@
                     <td style="padding:8px;border-bottom:1px solid #f1f1f1">${pinText}</td>
                     <td style="padding:8px;border-bottom:1px solid #f1f1f1">${assigned.length ? assigned.join(', ') : '<em>None</em>'}</td>
                     <td style="padding:8px;border-bottom:1px solid #f1f1f1">
-                        <input list="pin-options" id="pin-in-${spot}" type="number" placeholder="1-27" min="1" max="27" style="width:80px;padding:6px;margin-right:6px" />
-                        <button class="form-btn" onclick="setPinInline('${spot}')" style="padding:6px 10px">Set</button>
-                        <button class="form-btn" onclick="assignAliasInline('${spot}')" style="padding:6px 10px;margin-left:6px">Assign Alias</button>
-                        ${ (pin !== null && typeof pin !== 'undefined') ? `<button class="form-btn" style="background:#ffecd2;color:#333;margin-left:6px" onclick="deleteGPIOPin('${spot}')">Delete</button>` : '' }
+                        <button class="form-btn" onclick="useConfigSpotForAlias('${spot}')" style="padding:6px 10px">Use</button>
+                        ${ (pin !== null && typeof pin !== 'undefined') ? `<span style="margin-left:8px;font-size:0.9em;color:#666">(mapped)</span>` : '' }
                     </td>
                 `;
                 tbody.appendChild(tr);
@@ -855,7 +853,7 @@
             }
         }
 
-        // Inline assign alias helper
+        // Inline assign alias helper (deprecated for UI - preserved for backward compatibility)
         async function assignAliasInline(spot) {
             const alias = prompt(`Assign an existing alias to ${spot}. Enter alias name:`);
             if (!alias) return;
@@ -876,6 +874,18 @@
             } catch (err) {
                 console.error('Assign alias failed', err);
                 updateStatus('Error assigning alias', false);
+            }
+        }
+
+        // Helper: copy config spot into Add Alias form
+        function useConfigSpotForAlias(spot) {
+            const el = document.getElementById('newAliasSpot');
+            if (el) {
+                el.value = spot;
+                updateStatus(`${spot} copied into Add Alias form`, true);
+                // Switch to the Config -> Aliases tab so the user can finish adding
+                switchTab('config');
+                switchConfigTab('aliases');
             }
         }
 
