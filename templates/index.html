@@ -501,13 +501,43 @@
                     </div>
                     <div class="form-group">
                         <label>Pin Number (1-27):</label>
-                        <input type="number" id="gpioPinNum" placeholder="1-27" min="1" max="27">
+                        <input list="pin-options" type="number" id="gpioPinNum" placeholder="1-27" min="1" max="27">
                     </div>
                     <button class="form-btn" onclick="updateGPIOPin()">Update Mapping</button>
                     <button class="form-btn" style="background:#ff9a9e;color:#333;margin-left:8px" onclick="resetGPIODefaults()">Reset to Defaults</button> 
                 </div>
                 <div id="gpio-list" class="config-list">
                     <h4>GPIO Pin Mappings:</h4>
+                    <datalist id="pin-options">
+                        <!-- Autocomplete options for quick pin entry (1-27) -->
+                        <option value="1"></option>
+                        <option value="2"></option>
+                        <option value="3"></option>
+                        <option value="4"></option>
+                        <option value="5"></option>
+                        <option value="6"></option>
+                        <option value="7"></option>
+                        <option value="8"></option>
+                        <option value="9"></option>
+                        <option value="10"></option>
+                        <option value="11"></option>
+                        <option value="12"></option>
+                        <option value="13"></option>
+                        <option value="14"></option>
+                        <option value="15"></option>
+                        <option value="16"></option>
+                        <option value="17"></option>
+                        <option value="18"></option>
+                        <option value="19"></option>
+                        <option value="20"></option>
+                        <option value="21"></option>
+                        <option value="22"></option>
+                        <option value="23"></option>
+                        <option value="24"></option>
+                        <option value="25"></option>
+                        <option value="26"></option>
+                        <option value="27"></option>
+                    </datalist>
                     <div style="font-size:0.95em;color:#444;margin-bottom:10px">Click <strong>Set</strong> to update the physical pin for a config spot, or <strong>Assign Alias</strong> to bind an alias to that spot.</div>
                     <div style="overflow:auto;max-height:360px">
                         <table id="gpio-table" style="width:100%;border-collapse:collapse;">
@@ -786,7 +816,7 @@
                     <td style="padding:8px;border-bottom:1px solid #f1f1f1">${pinText}</td>
                     <td style="padding:8px;border-bottom:1px solid #f1f1f1">${assigned.length ? assigned.join(', ') : '<em>None</em>'}</td>
                     <td style="padding:8px;border-bottom:1px solid #f1f1f1">
-                        <input id="pin-in-${spot}" type="number" placeholder="2-27" min="2" max="27" style="width:80px;padding:6px;margin-right:6px" />
+                        <input list="pin-options" id="pin-in-${spot}" type="number" placeholder="1-27" min="1" max="27" style="width:80px;padding:6px;margin-right:6px" />
                         <button class="form-btn" onclick="setPinInline('${spot}')" style="padding:6px 10px">Set</button>
                         <button class="form-btn" onclick="assignAliasInline('${spot}')" style="padding:6px 10px;margin-left:6px">Assign Alias</button>
                         ${ (pin !== null && typeof pin !== 'undefined') ? `<button class="form-btn" style="background:#ffecd2;color:#333;margin-left:6px" onclick="deleteGPIOPin('${spot}')">Delete</button>` : '' }
@@ -800,8 +830,12 @@
         async function setPinInline(spot) {
             const el = document.getElementById('pin-in-' + spot);
             const val = el && el.value ? parseInt(el.value) : null;
-            if (!val || val < 2 || val > 27) {
-                updateStatus('Please enter a valid pin number (2-27)', false);
+            if (!val || val < 1 || val > 27) {
+                updateStatus('Please enter a valid pin number (1-27)', false);
+                return;
+            }
+            if (val === 1) {
+                updateStatus('Pin 1 is reserved on many platforms; please choose 2-27', false);
                 return;
             }
             try {
@@ -910,6 +944,14 @@
 
             if (!spot || !pin) {
                 updateStatus('Please fill in all fields', false);
+                return;
+            }
+            if (parseInt(pin) < 1 || parseInt(pin) > 27) {
+                updateStatus('Please enter a valid pin number (1-27)', false);
+                return;
+            }
+            if (parseInt(pin) === 1) {
+                updateStatus('Pin 1 is reserved on many platforms; please choose 2-27', false);
                 return;
             }
 
